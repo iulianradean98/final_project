@@ -1,0 +1,43 @@
+services:
+  database:
+    image: postgres:17-alpine
+    container_name: recipe-rescue-db
+    environment:
+      POSTGRES_DB: recipe_rescue
+      POSTGRES_USER: recipe_user
+      POSTGRES_PASSWORD: recipe_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - recipe_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recipe_user -d recipe_rescue"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: recipe-rescue-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://recipe_user:recipe_password@database:5432/recipe_rescue
+      ALLOWED_ORIGINS: '["http://localhost:3001","http://localhost:3000","http://localhost:8080","http://localhost:5173"]'
+      SEED_DEMO_DATA: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: recipe-rescue-web
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+
+volumes:
+  recipe_postgres_data:
