@@ -35,6 +35,18 @@ Open:
 - Health check: http://localhost:8000/api/health
 - Readiness check: http://localhost:8000/api/ready
 
+## Docker Images
+
+The CI/CD pipeline publishes application images to Docker Hub after the `CI` workflow succeeds on `main`.
+
+- Backend: `iulian98/recipe-rescue-backend`
+- Frontend: `iulian98/recipe-rescue-frontend`
+
+Each image is tagged with:
+
+- `latest`
+- `sha-<commit-sha>`
+
 ## Application Pages
 
 - Home: landing page with project summary and navigation.
