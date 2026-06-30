@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recipe-rescue-config
+  namespace: recipe-rescue
+data:
+  ALLOWED_ORIGINS: '["http://localhost:3001","http://recipe-rescue.local"]'
+  SEED_DEMO_DATA: "true"

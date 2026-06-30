@@ -15,12 +15,15 @@ Recipe Rescue is a professional 3-tier web application for a DevOps capstone pro
 
 ```text
 Browser
-  -> React multipage frontend
+  -> React multipage frontend served by Nginx
+  -> Nginx /api proxy
   -> FastAPI REST API
   -> PostgreSQL database
 ```
 
 The frontend runs on `http://localhost:3001` when started through Docker Compose. The API runs on `http://localhost:8000`, and PostgreSQL is exposed on `localhost:5433` for local development because many machines already have a local PostgreSQL service on `5432`.
+
+The frontend calls `/api` in the browser. Nginx proxies those requests to the backend service, which keeps the same frontend image usable in Docker Compose and Kubernetes.
 
 ## Run Locally With Docker
 
@@ -46,6 +49,25 @@ Each image is tagged with:
 
 - `latest`
 - `sha-<commit-sha>`
+
+## Kubernetes Manifests
+
+Kubernetes manifests live in `k8s/base` and define the first cloud deployment shape:
+
+- frontend Deployment and Service
+- backend Deployment and Service
+- PostgreSQL StatefulSet and Service
+- PostgreSQL persistent volume claim template
+- application ConfigMap
+- liveness and readiness probes
+
+The Kubernetes base is rendered in CI with:
+
+```bash
+kubectl kustomize k8s/base
+```
+
+Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
 ## Application Pages
 
