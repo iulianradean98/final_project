@@ -1,5 +1,7 @@
 # Recipe Rescue
 
+[![CI](https://github.com/iulianradean98/final_project/actions/workflows/ci.yml/badge.svg)](https://github.com/iulianradean98/final_project/actions/workflows/ci.yml)
+
 Recipe Rescue is a professional 3-tier web application for a DevOps capstone project. It helps users track pantry ingredients and discover recipes they can cook with what they already have.
 
 ## Current Stack
