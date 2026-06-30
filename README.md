@@ -31,6 +31,7 @@ Open:
 - Frontend: http://localhost:3001
 - API docs: http://localhost:8000/docs
 - Health check: http://localhost:8000/api/health
+- Readiness check: http://localhost:8000/api/ready
 
 ## Application Pages
 
@@ -67,6 +68,7 @@ The demo user owns the seeded pantry inventory. Built-in recipes are public, whi
 ## Useful API Endpoints
 
 - `GET /api/health`
+- `GET /api/ready`
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
@@ -82,7 +84,7 @@ The demo user owns the seeded pantry inventory. Built-in recipes are public, whi
 ## Why This Project Works Well For DevOps
 
 - The application has three clear tiers, which makes containerization and deployment easy to explain.
-- The REST API has testable endpoints and a health endpoint for CI/CD and Kubernetes probes.
+- The REST API has testable endpoints plus separate health and readiness endpoints for CI/CD and Kubernetes probes.
 - PostgreSQL gives the project real persistence.
 - The UI has visible behavior changes, which is useful when demonstrating staging and Blue/Green production deployments.
 
