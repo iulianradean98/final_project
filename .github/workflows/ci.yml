@@ -82,7 +82,7 @@ jobs:
         run: kubectl kustomize k8s/base > rendered-manifests.yaml
 
       - name: Validate Kubernetes manifests with client dry-run
-        run: kubectl apply --dry-run=client -f rendered-manifests.yaml
+        run: kubectl apply --dry-run=client --validate=false -f rendered-manifests.yaml
 
       - name: Install kubeconform
         run: |
