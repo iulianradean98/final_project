@@ -65,6 +65,7 @@ The Kubernetes base is rendered in CI with:
 
 ```bash
 kubectl kustomize k8s/base
+kubectl apply --dry-run=client -f rendered-manifests.yaml
 ```
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
@@ -121,6 +122,7 @@ The demo user owns the seeded pantry inventory. Built-in recipes are public, whi
 
 - The application has three clear tiers, which makes containerization and deployment easy to explain.
 - The REST API has testable endpoints plus separate health and readiness endpoints for CI/CD and Kubernetes probes.
+- CI validates backend dependency consistency/tests, frontend dependency audit/lint/build, Kubernetes manifests, and Docker image builds.
 - PostgreSQL gives the project real persistence.
 - The UI has visible behavior changes, which is useful when demonstrating staging and Blue/Green production deployments.
 
