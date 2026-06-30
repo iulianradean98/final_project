@@ -66,7 +66,12 @@ The Kubernetes base is rendered in CI with:
 ```bash
 kubectl kustomize k8s/base
 kubectl apply --dry-run=client -f rendered-manifests.yaml
+kubeconform -strict -summary -ignore-missing-schemas rendered-manifests.yaml
+kube-linter lint rendered-manifests.yaml
+python scripts/check_k8s_policies.py rendered-manifests.yaml
 ```
+
+The CI policy checks verify practical cluster-free rules: the base must not render real Secrets, workload containers must define liveness/readiness probes and CPU/memory requests and limits, and Services must select an existing workload. kube-linter currently defers immutable image tag and full container runtime hardening checks until the GitOps image promotion phase.
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
