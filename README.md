@@ -65,7 +65,6 @@ The Kubernetes base is rendered in CI with:
 
 ```bash
 kubectl kustomize k8s/base
-kubectl apply --dry-run=client --validate=false -f rendered-manifests.yaml
 kubeconform -strict -summary -ignore-missing-schemas rendered-manifests.yaml
 kube-linter lint rendered-manifests.yaml
 python scripts/check_k8s_policies.py rendered-manifests.yaml
