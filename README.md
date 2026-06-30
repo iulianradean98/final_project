@@ -65,7 +65,12 @@ The Kubernetes base is rendered in CI with:
 
 ```bash
 kubectl kustomize k8s/base
+kubeconform -strict -summary -ignore-missing-schemas rendered-manifests.yaml
+kube-linter lint rendered-manifests.yaml
+python scripts/check_k8s_policies.py rendered-manifests.yaml
 ```
+
+The CI policy checks verify practical cluster-free rules: the base must not render real Secrets, workload containers must define liveness/readiness probes and CPU/memory requests and limits, and Services must select an existing workload. kube-linter currently defers immutable image tag and full container runtime hardening checks until the GitOps image promotion phase.
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
@@ -121,6 +126,7 @@ The demo user owns the seeded pantry inventory. Built-in recipes are public, whi
 
 - The application has three clear tiers, which makes containerization and deployment easy to explain.
 - The REST API has testable endpoints plus separate health and readiness endpoints for CI/CD and Kubernetes probes.
+- CI validates backend dependency consistency/tests, frontend dependency audit/lint/build, Kubernetes manifests, and Docker image builds.
 - PostgreSQL gives the project real persistence.
 - The UI has visible behavior changes, which is useful when demonstrating staging and Blue/Green production deployments.
 
