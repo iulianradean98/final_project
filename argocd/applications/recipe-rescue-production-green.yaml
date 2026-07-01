@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: recipe-rescue-production-green
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: recipe-rescue
+  source:
+    repoURL: https://github.com/iulianradean98/final_project.git
+    targetRevision: main
+    path: k8s/overlays/production-green
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: recipe-rescue-green
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

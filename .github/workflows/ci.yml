@@ -116,6 +116,9 @@ jobs:
       - name: Run project Kubernetes policy checks
         run: python scripts/check_k8s_policies.py rendered-manifests/*.yaml
 
+      - name: Run ArgoCD manifest checks
+        run: python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applications/*.yaml
+
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest
