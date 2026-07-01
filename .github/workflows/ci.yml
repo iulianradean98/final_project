@@ -79,7 +79,13 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Render Kubernetes manifests
-        run: kubectl kustomize k8s/base > rendered-manifests.yaml
+        run: |
+          mkdir -p rendered-manifests
+          for kustomization in k8s/base/kustomization.yaml k8s/overlays/*/kustomization.yaml; do
+            target_dir="$(dirname "${kustomization}")"
+            target_name="$(echo "${target_dir}" | tr '/' '-')"
+            kubectl kustomize "${target_dir}" > "rendered-manifests/${target_name}.yaml"
+          done
 
       - name: Install kubeconform
         run: |
@@ -88,7 +94,7 @@ jobs:
           sudo mv kubeconform /usr/local/bin/kubeconform
 
       - name: Validate Kubernetes manifests with kubeconform
-        run: kubeconform -strict -summary -ignore-missing-schemas rendered-manifests.yaml
+        run: kubeconform -strict -summary -ignore-missing-schemas rendered-manifests/*.yaml
 
       - name: Install kube-linter
         run: |
@@ -102,13 +108,13 @@ jobs:
           --exclude latest-tag
           --exclude no-read-only-root-fs
           --exclude run-as-non-root
-          rendered-manifests.yaml
+          rendered-manifests/*.yaml
 
       - name: Install Kubernetes policy dependencies
         run: python -m pip install pyyaml
 
       - name: Run project Kubernetes policy checks
-        run: python scripts/check_k8s_policies.py rendered-manifests.yaml
+        run: python scripts/check_k8s_policies.py rendered-manifests/*.yaml
 
   docker:
     name: Docker image builds

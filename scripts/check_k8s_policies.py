@@ -10,6 +10,22 @@ import yaml
 WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 
 
+def expand_manifest_paths(raw_paths: list[str]) -> list[Path]:
+    paths: list[Path] = []
+
+    for raw_path in raw_paths:
+        if any(pattern in raw_path for pattern in ("*", "?", "[")):
+            matches = sorted(Path().glob(raw_path))
+            if not matches:
+                print(f"No manifest files matched pattern: {raw_path}")
+                raise SystemExit(2)
+            paths.extend(matches)
+        else:
+            paths.append(Path(raw_path))
+
+    return paths
+
+
 def load_documents(path: Path) -> list[dict[str, Any]]:
     raw_content = path.read_bytes()
     for encoding in ("utf-8", "utf-8-sig", "utf-16"):
@@ -57,20 +73,24 @@ def service_selector_matches(selector: dict[str, str], labels: dict[str, str]) -
     return all(labels.get(key) == value for key, value in selector.items())
 
 
-def validate_no_rendered_secrets(resources: list[dict[str, Any]]) -> list[str]:
+def validate_no_rendered_secrets(
+    resources: list[dict[str, Any]], manifest_path: Path
+) -> list[str]:
     errors = []
 
     for resource in resources:
         if resource.get("kind") == "Secret":
             errors.append(
-                f"Secret/{metadata_name(resource)} must not be rendered from k8s/base. "
+                f"{manifest_path}: Secret/{metadata_name(resource)} must not be rendered. "
                 "Commit only secret examples and create real secrets outside Git."
             )
 
     return errors
 
 
-def validate_workload_containers(resources: list[dict[str, Any]]) -> list[str]:
+def validate_workload_containers(
+    resources: list[dict[str, Any]], manifest_path: Path
+) -> list[str]:
     errors = []
 
     for resource in resources:
@@ -81,7 +101,7 @@ def validate_workload_containers(resources: list[dict[str, Any]]) -> list[str]:
         name = metadata_name(resource)
         for container in containers(resource):
             container_name = container.get("name", "<unnamed>")
-            location = f"{kind}/{name} container/{container_name}"
+            location = f"{manifest_path}: {kind}/{name} container/{container_name}"
 
             if "readinessProbe" not in container:
                 errors.append(f"{location} must define a readinessProbe.")
@@ -109,7 +129,9 @@ def validate_workload_containers(resources: list[dict[str, Any]]) -> list[str]:
     return errors
 
 
-def validate_service_selectors(resources: list[dict[str, Any]]) -> list[str]:
+def validate_service_selectors(
+    resources: list[dict[str, Any]], manifest_path: Path
+) -> list[str]:
     errors = []
     workload_labels = [
         pod_labels(resource)
@@ -124,27 +146,32 @@ def validate_service_selectors(resources: list[dict[str, Any]]) -> list[str]:
         name = metadata_name(resource)
         selector = resource.get("spec", {}).get("selector") or {}
         if not selector:
-            errors.append(f"Service/{name} must define a selector.")
+            errors.append(f"{manifest_path}: Service/{name} must define a selector.")
             continue
 
         if not any(service_selector_matches(selector, labels) for labels in workload_labels):
-            errors.append(f"Service/{name} selector does not match any workload pod labels.")
+            errors.append(
+                f"{manifest_path}: Service/{name} selector does not match any workload pod labels."
+            )
 
     return errors
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: python scripts/check_k8s_policies.py <rendered-manifests.yaml>")
+    if len(sys.argv) < 2:
+        print("Usage: python scripts/check_k8s_policies.py <rendered-manifests.yaml> [...]")
         return 2
 
-    manifest_path = Path(sys.argv[1])
-    resources = load_documents(manifest_path)
-    errors = [
-        *validate_no_rendered_secrets(resources),
-        *validate_workload_containers(resources),
-        *validate_service_selectors(resources),
-    ]
+    errors = []
+    for manifest_path in expand_manifest_paths(sys.argv[1:]):
+        resources = load_documents(manifest_path)
+        errors.extend(
+            [
+                *validate_no_rendered_secrets(resources, manifest_path),
+                *validate_workload_containers(resources, manifest_path),
+                *validate_service_selectors(resources, manifest_path),
+            ]
+        )
 
     if errors:
         print("Kubernetes policy checks failed:")
