@@ -52,7 +52,7 @@ Each image is tagged with:
 
 ## Kubernetes Manifests
 
-Kubernetes manifests live in `k8s/base` and define the first cloud deployment shape:
+Kubernetes manifests live in `k8s/base` and `k8s/overlays` and define the first cloud deployment shape:
 
 - frontend Deployment and Service
 - backend Deployment and Service
@@ -60,17 +60,23 @@ Kubernetes manifests live in `k8s/base` and define the first cloud deployment sh
 - PostgreSQL persistent volume claim template
 - application ConfigMap
 - liveness and readiness probes
+- dev, production-blue, and production-green overlays
 
-The Kubernetes base is rendered in CI with:
+The Kubernetes manifests are rendered in CI with:
 
 ```bash
 kubectl kustomize k8s/base
-kubeconform -strict -summary -ignore-missing-schemas rendered-manifests.yaml
-kube-linter lint rendered-manifests.yaml
-python scripts/check_k8s_policies.py rendered-manifests.yaml
+kubectl kustomize k8s/overlays/dev
+kubectl kustomize k8s/overlays/production-blue
+kubectl kustomize k8s/overlays/production-green
+kubeconform -strict -summary -ignore-missing-schemas rendered-manifests/*.yaml
+kube-linter lint rendered-manifests/*.yaml
+python scripts/check_k8s_policies.py rendered-manifests/*.yaml
 ```
 
-The CI policy checks verify practical cluster-free rules: the base must not render real Secrets, workload containers must define liveness/readiness probes and CPU/memory requests and limits, and Services must select an existing workload. kube-linter currently defers immutable image tag and full container runtime hardening checks until the GitOps image promotion phase.
+The CI policy checks verify practical cluster-free rules: rendered manifests must not contain real Secrets, workload containers must define liveness/readiness probes and CPU/memory requests and limits, and Services must select an existing workload. kube-linter currently defers immutable image tag and full container runtime hardening checks until the GitOps image promotion phase.
+
+The blue-green structure currently uses separate namespaces: `recipe-rescue-blue` and `recipe-rescue-green`. This keeps both production colors isolated and ready for a later ArgoCD/AWS traffic-switching layer.
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
