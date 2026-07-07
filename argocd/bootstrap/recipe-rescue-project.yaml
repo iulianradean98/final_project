@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: recipe-rescue
+  namespace: argocd
+spec:
+  description: Recipe Rescue GitOps project
+  sourceRepos:
+    - https://github.com/iulianradean98/final_project.git
+  destinations:
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+    - namespace: recipe-rescue-dev
+      server: https://kubernetes.default.svc
+    - namespace: recipe-rescue-blue
+      server: https://kubernetes.default.svc
+    - namespace: recipe-rescue-green
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

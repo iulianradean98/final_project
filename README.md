@@ -80,6 +80,25 @@ The blue-green structure currently uses separate namespaces: `recipe-rescue-blue
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
+## ArgoCD GitOps
+
+ArgoCD bootstrap manifests live in `argocd/bootstrap`, and child application manifests live in `argocd/applications`.
+
+The ArgoCD structure follows an app-of-apps pattern:
+
+- `recipe-rescue-root` watches `argocd/applications`.
+- `recipe-rescue-dev` syncs `k8s/overlays/dev`.
+- `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue`.
+- `recipe-rescue-production-green` syncs `k8s/overlays/production-green`.
+
+Dev is configured for automated sync and self-healing. Production blue and green are kept manual for now so the inactive color can be synced, tested, and promoted deliberately during blue-green releases.
+
+ArgoCD manifests are checked in CI with:
+
+```bash
+python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applications/*.yaml
+```
+
 ## Application Pages
 
 - Home: landing page with project summary and navigation.
