@@ -8,11 +8,11 @@ import yaml
 
 
 REPO_URL = "https://github.com/iulianradean98/final_project.git"
-VALID_APPLICATION_PATHS = {
-    "argocd/applications",
-    "k8s/overlays/dev",
-    "k8s/overlays/production-blue",
-    "k8s/overlays/production-green",
+VALID_APPLICATION_TARGETS = {
+    "argocd/applications": "main",
+    "k8s/overlays/dev": "release/dev",
+    "k8s/overlays/production-blue": "release/production-blue",
+    "k8s/overlays/production-green": "release/production-green",
 }
 
 
@@ -56,13 +56,16 @@ def validate_application(path: Path, resource: dict[str, Any]) -> list[str]:
         errors.append(f"{path}: Application/{name} must use repoURL {REPO_URL}.")
 
     source_path = source.get("path")
-    if source_path not in VALID_APPLICATION_PATHS:
+    expected_target_revision = VALID_APPLICATION_TARGETS.get(source_path)
+    if expected_target_revision is None:
         errors.append(f"{path}: Application/{name} uses unexpected source path {source_path}.")
     elif not Path(source_path).exists():
         errors.append(f"{path}: Application/{name} source path does not exist: {source_path}.")
-
-    if source.get("targetRevision") != "main":
-        errors.append(f"{path}: Application/{name} must target the main branch.")
+    elif source.get("targetRevision") != expected_target_revision:
+        errors.append(
+            f"{path}: Application/{name} must target {expected_target_revision} "
+            f"for source path {source_path}."
+        )
 
     if destination.get("server") != "https://kubernetes.default.svc":
         errors.append(f"{path}: Application/{name} must target the in-cluster Kubernetes API.")

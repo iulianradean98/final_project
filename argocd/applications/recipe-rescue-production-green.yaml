@@ -9,11 +9,14 @@ spec:
   project: recipe-rescue
   source:
     repoURL: https://github.com/iulianradean98/final_project.git
-    targetRevision: main
+    targetRevision: release/production-green
     path: k8s/overlays/production-green
   destination:
     server: https://kubernetes.default.svc
     namespace: recipe-rescue-green
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
