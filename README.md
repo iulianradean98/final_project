@@ -131,12 +131,12 @@ Create the `release` branch once from `main` after the CI/CD workflow files are 
 
 Pull requests into `release` run deployment-focused checks only:
 
-- Kubernetes render
-- Kubernetes schema validation
-- Kubernetes lint
-- Kubernetes project policy
-- ArgoCD manifest policy
+- release changed-files policy
 - release image tag validation
+- promoted Docker image existence
+- promoted overlay render
+
+The Docker image existence check expects the selected `sha-<12-character-commit-sha>` image tag to already exist in Docker Hub, so run promotion only after the `Docker Publish` workflow has completed successfully on `main`.
 
 ## Application Pages
 
