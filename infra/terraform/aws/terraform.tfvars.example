@@ -7,16 +7,16 @@ owner        = "iulian"
 vpc_cidr = "10.40.0.0/16"
 az_count = 2
 
-# Cost-aware default for a student project: no NAT Gateway.
-# Worker nodes use public subnets, while AWS security groups still control access.
-enable_nat_gateway = false
+# Professional demo default: private worker nodes with one NAT Gateway.
+# This costs more than public worker nodes, but it is the cleaner production-style design.
+enable_nat_gateway = true
 single_nat_gateway = true
-use_private_nodes  = false
+use_private_nodes  = true
 
 kubernetes_version = "1.33"
 
 node_instance_types = ["t3.small"]
 node_capacity_type  = "ON_DEMAND"
 node_min_size       = 1
-node_desired_size   = 1
-node_max_size       = 2
+node_desired_size   = 2
+node_max_size       = 3
