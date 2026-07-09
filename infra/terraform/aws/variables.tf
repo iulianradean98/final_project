@@ -45,6 +45,18 @@ variable "single_nat_gateway" {
   default     = true
 }
 
+variable "enable_nat_gateway" {
+  description = "Create a NAT Gateway for private subnet internet access. Disable for the lowest-cost student demo profile."
+  type        = bool
+  default     = false
+}
+
+variable "use_private_nodes" {
+  description = "Place worker nodes in private subnets. Requires enable_nat_gateway=true so nodes can pull container images."
+  type        = bool
+  default     = false
+}
+
 variable "kubernetes_version" {
   description = "EKS Kubernetes control plane version."
   type        = string
@@ -57,6 +69,17 @@ variable "node_instance_types" {
   default     = ["t3.small"]
 }
 
+variable "node_capacity_type" {
+  description = "EKS node capacity type. Use ON_DEMAND for stability or SPOT for lower cost with interruption risk."
+  type        = string
+  default     = "ON_DEMAND"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
+    error_message = "node_capacity_type must be either ON_DEMAND or SPOT."
+  }
+}
+
 variable "node_min_size" {
   description = "Minimum number of worker nodes."
   type        = number
@@ -66,11 +89,11 @@ variable "node_min_size" {
 variable "node_desired_size" {
   description = "Desired number of worker nodes."
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "node_max_size" {
   description = "Maximum number of worker nodes."
   type        = number
-  default     = 3
+  default     = 2
 }
