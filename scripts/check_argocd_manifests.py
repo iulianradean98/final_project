@@ -10,7 +10,7 @@ import yaml
 REPO_URL = "https://github.com/iulianradean98/final_project.git"
 VALID_APPLICATION_TARGETS = {
     "argocd/applications": "main",
-    "k8s/overlays/staging": "release",
+    "k8s/overlays/staging": "staging",
     "k8s/overlays/production-blue": "release",
     "k8s/overlays/production-green": "release",
 }

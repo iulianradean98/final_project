@@ -2,34 +2,18 @@ name: Promote Release
 
 on:
   workflow_dispatch:
-    inputs:
-      target_environment:
-        description: Environment to promote
-        required: true
-        type: choice
-        options:
-          - staging
-          - production-blue
-          - production-green
-      source_ref:
-        description: Source branch, tag, or commit whose Docker image should be promoted
-        required: true
-        default: main
-      image_tag:
-        description: Optional Docker image tag. Defaults to sha-<short source commit>.
-        required: false
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 concurrency:
-  group: promote-${{ inputs.target_environment }}
+  group: promote-release
   cancel-in-progress: false
 
 jobs:
-  promote:
-    name: Prepare ${{ inputs.target_environment }} release PR
+  open-release-pr:
+    name: Open main to release PR
     runs-on: ubuntu-latest
 
     steps:
@@ -38,121 +22,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve promotion target
-        id: target
-        env:
-          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
-          SOURCE_REF: ${{ inputs.source_ref }}
-          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+      - name: Verify release branch exists
         run: |
-          git fetch origin "+refs/heads/*:refs/remotes/origin/*" "+refs/tags/*:refs/tags/*"
-
+          git fetch origin "+refs/heads/*:refs/remotes/origin/*"
           if ! git rev-parse --verify --quiet "origin/release^{commit}" >/dev/null; then
             echo "The release branch does not exist yet."
             echo "Create it once from main, protect it, then rerun this workflow."
             exit 1
           fi
 
-          if git rev-parse --verify --quiet "${SOURCE_REF}^{commit}" >/dev/null; then
-            source_commit="$(git rev-parse "${SOURCE_REF}^{commit}")"
-          elif git rev-parse --verify --quiet "origin/${SOURCE_REF}^{commit}" >/dev/null; then
-            source_commit="$(git rev-parse "origin/${SOURCE_REF}^{commit}")"
-          else
-            echo "Unable to resolve source_ref '${SOURCE_REF}' to a commit."
-            exit 1
-          fi
-
-          short_sha="${source_commit:0:12}"
-          image_tag="${IMAGE_TAG_INPUT:-sha-${short_sha}}"
-
-          case "${TARGET_ENVIRONMENT}" in
-            staging)
-              overlay_path="k8s/overlays/staging"
-              ;;
-            production-blue)
-              overlay_path="k8s/overlays/production-blue"
-              ;;
-            production-green)
-              overlay_path="k8s/overlays/production-green"
-              ;;
-            *)
-              echo "Unsupported target_environment '${TARGET_ENVIRONMENT}'."
-              exit 1
-              ;;
-          esac
-
-          promotion_branch="promote/${TARGET_ENVIRONMENT}-${short_sha}"
-
-          echo "source_commit=${source_commit}" >> "${GITHUB_OUTPUT}"
-          echo "short_sha=${short_sha}" >> "${GITHUB_OUTPUT}"
-          echo "image_tag=${image_tag}" >> "${GITHUB_OUTPUT}"
-          echo "overlay_path=${overlay_path}" >> "${GITHUB_OUTPUT}"
-          echo "promotion_branch=${promotion_branch}" >> "${GITHUB_OUTPUT}"
-
-      - name: Configure Git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Prepare promotion branch
-        run: git switch --force-create "${{ steps.target.outputs.promotion_branch }}" origin/release
-
-      - name: Pin promoted image tag
-        run: python scripts/set_kustomize_images.py "${{ steps.target.outputs.overlay_path }}/kustomization.yaml" "${{ steps.target.outputs.image_tag }}"
-
-      - name: Commit promotion change
-        id: commit
-        run: |
-          git add "${{ steps.target.outputs.overlay_path }}/kustomization.yaml"
-          if git diff --cached --quiet; then
-            echo "No promotion changes to commit."
-            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
-          else
-            git commit -m "Promote ${{ inputs.target_environment }} to ${{ steps.target.outputs.image_tag }}"
-            echo "has_changes=true" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Push promotion branch
-        if: ${{ steps.commit.outputs.has_changes == 'true' }}
-        run: git push origin "HEAD:${{ steps.target.outputs.promotion_branch }}" --force
-
       - name: Open release pull request
-        if: ${{ steps.commit.outputs.has_changes == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           existing_pr="$(gh pr list \
-            --head "${{ steps.target.outputs.promotion_branch }}" \
+            --head main \
             --base release \
             --state open \
             --json number \
             --jq '.[0].number')"
 
           if [ -n "${existing_pr}" ]; then
-            echo "Promotion PR already exists: #${existing_pr}"
+            echo "Release PR already exists: #${existing_pr}"
             exit 0
           fi
 
           gh pr create \
             --base release \
-            --head "${{ steps.target.outputs.promotion_branch }}" \
-            --title "Promote ${{ inputs.target_environment }} to ${{ steps.target.outputs.image_tag }}" \
-            --body "Promotes \`${{ inputs.target_environment }}\` to Docker image tag \`${{ steps.target.outputs.image_tag }}\`.
+            --head main \
+            --title "Promote main to release" \
+            --body "Promotes the validated main branch into the protected release branch.
 
-          Source ref: \`${{ inputs.source_ref }}\`
-          Source commit: \`${{ steps.target.outputs.short_sha }}\`
-
-          After this PR is approved and merged into \`release\`, ArgoCD will sync the selected overlay automatically."
+          After this PR is approved and merged, ArgoCD will reconcile the production applications from \`release\`."
 
       - name: Write promotion summary
         run: |
           {
-            echo "### Release promotion PR"
+            echo "### Release promotion"
             echo ""
-            echo "- Environment: \`${{ inputs.target_environment }}\`"
-            echo "- Base branch: \`release\`"
-            echo "- Promotion branch: \`${{ steps.target.outputs.promotion_branch }}\`"
-            echo "- Source commit: \`${{ steps.target.outputs.short_sha }}\`"
-            echo "- Image tag: \`${{ steps.target.outputs.image_tag }}\`"
-            echo "- Changes created: \`${{ steps.commit.outputs.has_changes }}\`"
+            echo "- Source branch: \`main\`"
+            echo "- Target branch: \`release\`"
+            echo "- Approval gate: protected release PR"
           } >> "${GITHUB_STEP_SUMMARY}"
