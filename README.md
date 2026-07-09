@@ -47,6 +47,7 @@ Images published from `main` are tagged with:
 
 - `latest`
 - `sha-<12-character-commit-sha>`
+- `build-<github-run-number>`
 
 ## Kubernetes Manifests
 
@@ -58,13 +59,13 @@ Kubernetes manifests live in `k8s/base` and `k8s/overlays` and define the first 
 - PostgreSQL persistent volume claim template
 - application ConfigMap
 - liveness and readiness probes
-- dev, production-blue, and production-green overlays
+- staging, production-blue, and production-green overlays
 
 The Kubernetes manifests are rendered in CI with:
 
 ```bash
 kubectl kustomize k8s/base
-kubectl kustomize k8s/overlays/dev
+kubectl kustomize k8s/overlays/staging
 kubectl kustomize k8s/overlays/production-blue
 kubectl kustomize k8s/overlays/production-green
 kubeconform -strict -summary -ignore-missing-schemas rendered-manifests/*.yaml
@@ -85,7 +86,7 @@ ArgoCD bootstrap manifests live in `argocd/bootstrap`, and child application man
 The ArgoCD structure follows an app-of-apps pattern:
 
 - `recipe-rescue-root` watches `argocd/applications`.
-- `recipe-rescue-dev` syncs `k8s/overlays/dev` from `release`.
+- `recipe-rescue-staging` syncs `k8s/overlays/staging` from `release`.
 - `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release`.
 - `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release`.
 
@@ -104,6 +105,7 @@ Pull requests to `main` run one orchestrator workflow named `PR Checks`. That wo
 The reusable PR checks are:
 
 - backend dependency consistency
+- backend lint
 - backend tests
 - frontend dependency audit
 - frontend lint
@@ -190,7 +192,7 @@ The demo user owns the seeded pantry inventory. Built-in recipes are public, whi
 
 - The application has three clear tiers, which makes containerization and deployment easy to explain.
 - The REST API has testable endpoints plus separate health and readiness endpoints for CI/CD and Kubernetes probes.
-- PR checks validate backend dependency consistency/tests, frontend dependency audit/lint/build, Kubernetes manifests, ArgoCD manifests, and Docker image builds.
+- PR checks validate backend dependency consistency/lint/tests, frontend dependency audit/lint/build, Kubernetes manifests, ArgoCD manifests, and Docker image builds.
 - PostgreSQL gives the project real persistence.
 - The UI has visible behavior changes, which is useful when demonstrating staging and Blue/Green production deployments.
 

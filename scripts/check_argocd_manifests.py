@@ -10,7 +10,7 @@ import yaml
 REPO_URL = "https://github.com/iulianradean98/final_project.git"
 VALID_APPLICATION_TARGETS = {
     "argocd/applications": "main",
-    "k8s/overlays/dev": "release",
+    "k8s/overlays/staging": "release",
     "k8s/overlays/production-blue": "release",
     "k8s/overlays/production-green": "release",
 }
@@ -91,7 +91,7 @@ def validate_project(path: Path, resource: dict[str, Any]) -> list[str]:
     }
     required_namespaces = {
         "argocd",
-        "recipe-rescue-dev",
+        "recipe-rescue-staging",
         "recipe-rescue-blue",
         "recipe-rescue-green",
     }

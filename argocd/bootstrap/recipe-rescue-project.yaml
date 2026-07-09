@@ -10,7 +10,7 @@ spec:
   destinations:
     - namespace: argocd
       server: https://kubernetes.default.svc
-    - namespace: recipe-rescue-dev
+    - namespace: recipe-rescue-staging
       server: https://kubernetes.default.svc
     - namespace: recipe-rescue-blue
       server: https://kubernetes.default.svc

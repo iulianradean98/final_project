@@ -2,12 +2,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-namespace: recipe-rescue-dev
+namespace: recipe-rescue-staging
 labels:
   - includeSelectors: true
     pairs:
       app.kubernetes.io/part-of: recipe-rescue
-      app.kubernetes.io/environment: dev
+      app.kubernetes.io/environment: staging
 patches:
   - target:
       kind: Namespace
@@ -15,11 +15,11 @@ patches:
     patch: |-
       - op: replace
         path: /metadata/name
-        value: recipe-rescue-dev
+        value: recipe-rescue-staging
   - target:
       kind: ConfigMap
       name: recipe-rescue-config
     patch: |-
       - op: replace
         path: /data/ALLOWED_ORIGINS
-        value: '["http://localhost:3001","http://recipe-rescue-dev.local"]'
+        value: '["http://localhost:3001","http://recipe-rescue-staging.local"]'
