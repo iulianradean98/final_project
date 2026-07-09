@@ -1,0 +1,63 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  backend-dependencies:
+    name: Backend dependency consistency
+    uses: ./.github/workflows/check-backend-dependencies.yml
+
+  backend-tests:
+    name: Backend tests
+    uses: ./.github/workflows/check-backend-tests.yml
+
+  frontend-audit:
+    name: Frontend dependency audit
+    uses: ./.github/workflows/check-frontend-audit.yml
+
+  frontend-lint:
+    name: Frontend lint
+    uses: ./.github/workflows/check-frontend-lint.yml
+
+  frontend-build:
+    name: Frontend build
+    uses: ./.github/workflows/check-frontend-build.yml
+
+  kubernetes-render:
+    name: Kubernetes render
+    uses: ./.github/workflows/check-kubernetes-render.yml
+
+  kubernetes-schema:
+    name: Kubernetes schema validation
+    uses: ./.github/workflows/check-kubernetes-schema.yml
+
+  kubernetes-lint:
+    name: Kubernetes lint
+    uses: ./.github/workflows/check-kubernetes-lint.yml
+
+  kubernetes-policy:
+    name: Kubernetes project policy
+    uses: ./.github/workflows/check-kubernetes-policy.yml
+
+  argocd-policy:
+    name: ArgoCD manifest policy
+    uses: ./.github/workflows/check-argocd-policy.yml
+
+  docker-backend-build:
+    name: Docker backend build
+    uses: ./.github/workflows/check-docker-backend-build.yml
+
+  docker-frontend-build:
+    name: Docker frontend build
+    uses: ./.github/workflows/check-docker-frontend-build.yml

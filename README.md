@@ -38,7 +38,7 @@ Open:
 
 ## Docker Images
 
-The CI/CD pipeline publishes application images to Docker Hub after the `CI` workflow succeeds on `main`.
+The `Docker Publish` workflow publishes application images to Docker Hub after changes are pushed to `main`.
 
 - Backend: `iulian98/recipe-rescue-backend`
 - Frontend: `iulian98/recipe-rescue-frontend`
@@ -99,7 +99,9 @@ python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applicat
 
 ## CI/CD Flow
 
-Pull requests to `main` run separate validation workflows so failures are easy to locate:
+Pull requests to `main` run one orchestrator workflow named `PR Checks`. That workflow calls separate reusable check workflows from the `.github/workflows/check-*.yml` files, so the GitHub UI stays organized while each validation still has its own focused YAML file.
+
+The reusable PR checks are:
 
 - backend dependency consistency
 - backend tests
