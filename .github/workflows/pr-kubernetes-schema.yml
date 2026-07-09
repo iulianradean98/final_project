@@ -1,0 +1,44 @@
+name: PR Kubernetes Schema
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+
+env:
+  KUBECONFORM_VERSION: "0.8.0"
+
+jobs:
+  kubernetes-schema:
+    name: Kubernetes schema validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Render Kubernetes manifests
+        run: |
+          mkdir -p rendered-manifests
+          for kustomization in k8s/base/kustomization.yaml k8s/overlays/*/kustomization.yaml; do
+            target_dir="$(dirname "${kustomization}")"
+            target_name="$(echo "${target_dir}" | tr '/' '-')"
+            kubectl kustomize "${target_dir}" > "rendered-manifests/${target_name}.yaml"
+          done
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL -o kubeconform.tar.gz "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo mv kubeconform /usr/local/bin/kubeconform
+
+      - name: Validate Kubernetes schemas
+        run: kubeconform -strict -summary -ignore-missing-schemas rendered-manifests/*.yaml
