@@ -12,8 +12,9 @@ module "vpc" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  enable_nat_gateway = true
-  single_nat_gateway = var.single_nat_gateway
+  map_public_ip_on_launch = true
+  enable_nat_gateway      = var.enable_nat_gateway
+  single_nat_gateway      = var.single_nat_gateway
 
   public_subnet_tags = {
     "kubernetes.io/role/elb" = "1"
@@ -46,12 +47,13 @@ module "eks" {
   }
 
   vpc_id                   = module.vpc.vpc_id
-  subnet_ids               = module.vpc.private_subnets
+  subnet_ids               = var.use_private_nodes ? module.vpc.private_subnets : module.vpc.public_subnets
   control_plane_subnet_ids = module.vpc.private_subnets
 
   eks_managed_node_groups = {
     general = {
       ami_type       = "AL2023_x86_64_STANDARD"
+      capacity_type  = var.node_capacity_type
       instance_types = var.node_instance_types
 
       min_size     = var.node_min_size
