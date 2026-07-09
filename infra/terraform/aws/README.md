@@ -7,7 +7,7 @@ It creates:
 - one VPC dedicated to the project
 - public subnets for internet-facing load balancers
 - private subnets for EKS worker nodes
-- optional NAT Gateway for private worker node internet access
+- one NAT Gateway for private worker node internet access
 - one Amazon EKS cluster
 - one EKS managed node group for running ArgoCD, frontend, backend, and PostgreSQL
 
@@ -28,23 +28,27 @@ Terraform lets us describe infrastructure in files instead of creating it manual
 
 ## Important Cost Note
 
-This is a real AWS EKS environment, not a free-tier-only environment. EKS has a paid control plane, EC2 worker nodes create compute cost, NAT Gateways create hourly and data-processing cost if enabled, and persistent volumes/load balancers can also create cost later.
+This is a real AWS EKS environment, not a free-tier-only environment. EKS has a paid control plane, EC2 worker nodes create compute cost, NAT Gateways create hourly and data-processing cost, and persistent volumes/load balancers can also create cost later.
 
-The default variables are intentionally cost-aware for a student demo:
+The default variables are intentionally professional for a final DevOps presentation:
 
-- one `t3.small` worker node by default
-- NAT Gateway disabled by default
-- worker nodes placed in public subnets by default, protected by AWS security groups
-- maximum node count limited to `2`
+- two `t3.small` worker nodes by default
+- worker nodes placed in private subnets
+- one shared NAT Gateway for private subnet internet egress
+- maximum node count limited to `3`
 
-For a more production-like setup, set:
+This is more expensive than the lowest-cost demo mode, but it is easier to justify architecturally because application workloads are not placed directly in public subnets.
+
+For a temporary lower-cost experiment, set:
 
 ```hcl
-enable_nat_gateway = true
-use_private_nodes  = true
+enable_nat_gateway = false
+use_private_nodes  = false
+node_desired_size   = 1
+node_max_size       = 2
 ```
 
-That places worker nodes in private subnets, but it also increases cost because the NAT Gateway becomes necessary for internet egress.
+That removes the NAT Gateway and places worker nodes in public subnets. AWS security groups still control access, but the architecture is less production-like.
 
 Keep your AWS budget alerts enabled, and destroy the environment when you no longer need it:
 
@@ -127,6 +131,15 @@ Or use the guarded PowerShell helper:
 ```
 
 The script runs `terraform plan -destroy` first, then asks you to type `DESTROY` before it applies the deletion plan.
+
+For this project, the recommended operating habit is:
+
+1. Run `terraform apply` when you need the environment.
+2. Test the CI/CD, ArgoCD, and application deployment.
+3. Capture screenshots/evidence for the final documentation.
+4. Run the destroy helper at the end of the session.
+
+Do not leave the EKS cluster running indefinitely.
 
 ## Self-Recovery Strategy
 

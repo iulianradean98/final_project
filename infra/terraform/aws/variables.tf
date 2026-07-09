@@ -48,13 +48,13 @@ variable "single_nat_gateway" {
 variable "enable_nat_gateway" {
   description = "Create a NAT Gateway for private subnet internet access. Disable for the lowest-cost student demo profile."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "use_private_nodes" {
   description = "Place worker nodes in private subnets. Requires enable_nat_gateway=true so nodes can pull container images."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "kubernetes_version" {
@@ -89,11 +89,11 @@ variable "node_min_size" {
 variable "node_desired_size" {
   description = "Desired number of worker nodes."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "node_max_size" {
   description = "Maximum number of worker nodes."
   type        = number
-  default     = 2
+  default     = 3
 }

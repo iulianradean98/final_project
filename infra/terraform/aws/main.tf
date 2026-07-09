@@ -66,3 +66,10 @@ module "eks" {
     }
   }
 }
+
+check "private_nodes_need_nat_gateway" {
+  assert {
+    condition     = !var.use_private_nodes || var.enable_nat_gateway
+    error_message = "Private worker nodes need enable_nat_gateway=true so they can pull images and reach AWS APIs."
+  }
+}
