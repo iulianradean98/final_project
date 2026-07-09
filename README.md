@@ -1,7 +1,5 @@
 # Recipe Rescue
 
-[![CI](https://github.com/iulianradean98/final_project/actions/workflows/ci.yml/badge.svg)](https://github.com/iulianradean98/final_project/actions/workflows/ci.yml)
-
 Recipe Rescue is a professional 3-tier web application for a DevOps capstone project. It helps users track pantry ingredients and discover recipes they can cook with what they already have.
 
 ## Current Stack
@@ -45,10 +43,11 @@ The CI/CD pipeline publishes application images to Docker Hub after the `CI` wor
 - Backend: `iulian98/recipe-rescue-backend`
 - Frontend: `iulian98/recipe-rescue-frontend`
 
-Each image is tagged with:
+Images published from `main` are tagged with:
 
 - `latest`
-- `sha-<commit-sha>`
+- `sha-<12-character-commit-sha>`
+- `build-<github-run-number>`
 
 ## Kubernetes Manifests
 
@@ -87,17 +86,42 @@ ArgoCD bootstrap manifests live in `argocd/bootstrap`, and child application man
 The ArgoCD structure follows an app-of-apps pattern:
 
 - `recipe-rescue-root` watches `argocd/applications`.
-- `recipe-rescue-dev` syncs `k8s/overlays/dev`.
-- `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue`.
-- `recipe-rescue-production-green` syncs `k8s/overlays/production-green`.
+- `recipe-rescue-dev` syncs `k8s/overlays/dev` from `release/dev`.
+- `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release/production-blue`.
+- `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release/production-green`.
 
-Dev is configured for automated sync and self-healing. Production blue and green are kept manual for now so the inactive color can be synced, tested, and promoted deliberately during blue-green releases.
+The release branches are updated by the manually approved `Promote Release` workflow. After approval, the workflow pins the selected overlay to an immutable Docker image tag and pushes the matching release branch. ArgoCD then syncs that branch automatically.
 
 ArgoCD manifests are checked in CI with:
 
 ```bash
 python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applications/*.yaml
 ```
+
+## CI/CD Flow
+
+Pull requests to `main` run separate validation workflows so failures are easy to locate:
+
+- backend dependency consistency
+- backend tests
+- frontend dependency audit
+- frontend lint
+- frontend build
+- Kubernetes render
+- Kubernetes schema validation
+- Kubernetes lint
+- Kubernetes project policy
+- ArgoCD manifest policy
+- backend Docker image build
+- frontend Docker image build
+
+Pushes to `main` publish Docker images to Docker Hub. Deployment is handled separately by the manual `Promote Release` workflow, which updates one of the release branches watched by ArgoCD:
+
+- `release/dev`
+- `release/production-blue`
+- `release/production-green`
+
+Configure GitHub Environments named `dev`, `production-blue`, and `production-green` with required reviewers to make promotion wait for manual approval.
 
 ## Application Pages
 
@@ -151,7 +175,7 @@ The demo user owns the seeded pantry inventory. Built-in recipes are public, whi
 
 - The application has three clear tiers, which makes containerization and deployment easy to explain.
 - The REST API has testable endpoints plus separate health and readiness endpoints for CI/CD and Kubernetes probes.
-- CI validates backend dependency consistency/tests, frontend dependency audit/lint/build, Kubernetes manifests, and Docker image builds.
+- PR checks validate backend dependency consistency/tests, frontend dependency audit/lint/build, Kubernetes manifests, ArgoCD manifests, and Docker image builds.
 - PostgreSQL gives the project real persistence.
 - The UI has visible behavior changes, which is useful when demonstrating staging and Blue/Green production deployments.
 

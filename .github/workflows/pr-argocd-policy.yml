@@ -1,0 +1,29 @@
+name: PR ArgoCD Policy
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  argocd-policy:
+    name: ArgoCD manifest policy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install policy dependencies
+        run: python -m pip install pyyaml
+
+      - name: Run ArgoCD manifest checks
+        run: python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applications/*.yaml
