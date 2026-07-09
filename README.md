@@ -47,7 +47,6 @@ Images published from `main` are tagged with:
 
 - `latest`
 - `sha-<12-character-commit-sha>`
-- `build-<github-run-number>`
 
 ## Kubernetes Manifests
 
