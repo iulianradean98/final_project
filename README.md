@@ -85,11 +85,11 @@ ArgoCD bootstrap manifests live in `argocd/bootstrap`, and child application man
 The ArgoCD structure follows an app-of-apps pattern:
 
 - `recipe-rescue-root` watches `argocd/applications`.
-- `recipe-rescue-dev` syncs `k8s/overlays/dev` from `release/dev`.
-- `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release/production-blue`.
-- `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release/production-green`.
+- `recipe-rescue-dev` syncs `k8s/overlays/dev` from `release`.
+- `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release`.
+- `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release`.
 
-The release branches are updated by the manually approved `Promote Release` workflow. After approval, the workflow pins the selected overlay to an immutable Docker image tag and pushes the matching release branch. ArgoCD then syncs that branch automatically.
+The single `release` branch stores the approved deployment state. The `Promote Release` workflow prepares a promotion branch, pins the selected overlay to an immutable Docker image tag, and opens a PR into `release`. After that PR is approved and merged, ArgoCD syncs the selected overlay automatically.
 
 ArgoCD manifests are checked in CI with:
 
@@ -116,13 +116,27 @@ The reusable PR checks are:
 - backend Docker image build
 - frontend Docker image build
 
-Pushes to `main` publish Docker images to Docker Hub. Deployment is handled separately by the manual `Promote Release` workflow, which updates one of the release branches watched by ArgoCD:
+Pushes to `main` publish Docker images to Docker Hub. Deployment is handled separately by the manual `Promote Release` workflow, which opens a PR into the `release` branch watched by ArgoCD:
 
-- `release/dev`
-- `release/production-blue`
-- `release/production-green`
+1. Resolve the source commit and Docker image tag.
+2. Start from `origin/release`.
+3. Pin the selected overlay to `sha-<12-character-commit-sha>`.
+4. Open a PR into `release`.
+5. Wait for release branch checks and human approval.
+6. Merge into `release`, then ArgoCD syncs from that approved branch.
 
-Configure GitHub Environments named `dev`, `production-blue`, and `production-green` with required reviewers to make promotion wait for manual approval.
+Protect the `release` branch with required PR review, required release checks, blocked force pushes, and restricted direct pushes. That makes deployment approval happen through the release PR.
+
+Create the `release` branch once from `main` after the CI/CD workflow files are merged, then protect it. GitHub uses workflow files from the target branch for PR checks, so the release branch must contain `release-checks.yml` before promotion PRs can be validated.
+
+Pull requests into `release` run deployment-focused checks only:
+
+- Kubernetes render
+- Kubernetes schema validation
+- Kubernetes lint
+- Kubernetes project policy
+- ArgoCD manifest policy
+- release image tag validation
 
 ## Application Pages
 

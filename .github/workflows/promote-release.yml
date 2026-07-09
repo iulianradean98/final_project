@@ -12,7 +12,7 @@ on:
           - production-blue
           - production-green
       source_ref:
-        description: Source branch, tag, or commit to promote
+        description: Source branch, tag, or commit whose Docker image should be promoted
         required: true
         default: main
       image_tag:
@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: promote-${{ inputs.target_environment }}
@@ -28,10 +29,8 @@ concurrency:
 
 jobs:
   promote:
-    name: Promote ${{ inputs.target_environment }}
+    name: Prepare ${{ inputs.target_environment }} release PR
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ inputs.target_environment }}
 
     steps:
       - name: Checkout repository
@@ -48,6 +47,12 @@ jobs:
         run: |
           git fetch origin "+refs/heads/*:refs/remotes/origin/*" "+refs/tags/*:refs/tags/*"
 
+          if ! git rev-parse --verify --quiet "origin/release^{commit}" >/dev/null; then
+            echo "The release branch does not exist yet."
+            echo "Create it once from main, protect it, then rerun this workflow."
+            exit 1
+          fi
+
           if git rev-parse --verify --quiet "${SOURCE_REF}^{commit}" >/dev/null; then
             source_commit="$(git rev-parse "${SOURCE_REF}^{commit}")"
           elif git rev-parse --verify --quiet "origin/${SOURCE_REF}^{commit}" >/dev/null; then
@@ -62,15 +67,12 @@ jobs:
 
           case "${TARGET_ENVIRONMENT}" in
             dev)
-              release_branch="release/dev"
               overlay_path="k8s/overlays/dev"
               ;;
             production-blue)
-              release_branch="release/production-blue"
               overlay_path="k8s/overlays/production-blue"
               ;;
             production-green)
-              release_branch="release/production-green"
               overlay_path="k8s/overlays/production-green"
               ;;
             *)
@@ -79,42 +81,78 @@ jobs:
               ;;
           esac
 
+          promotion_branch="promote/${TARGET_ENVIRONMENT}-${short_sha}"
+
           echo "source_commit=${source_commit}" >> "${GITHUB_OUTPUT}"
           echo "short_sha=${short_sha}" >> "${GITHUB_OUTPUT}"
           echo "image_tag=${image_tag}" >> "${GITHUB_OUTPUT}"
-          echo "release_branch=${release_branch}" >> "${GITHUB_OUTPUT}"
           echo "overlay_path=${overlay_path}" >> "${GITHUB_OUTPUT}"
+          echo "promotion_branch=${promotion_branch}" >> "${GITHUB_OUTPUT}"
 
       - name: Configure Git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Prepare release branch content
-        run: git switch --force-create "${{ steps.target.outputs.release_branch }}" "${{ steps.target.outputs.source_commit }}"
+      - name: Prepare promotion branch
+        run: git switch --force-create "${{ steps.target.outputs.promotion_branch }}" origin/release
 
       - name: Pin promoted image tag
         run: python scripts/set_kustomize_images.py "${{ steps.target.outputs.overlay_path }}/kustomization.yaml" "${{ steps.target.outputs.image_tag }}"
 
-      - name: Commit release branch
+      - name: Commit promotion change
+        id: commit
         run: |
           git add "${{ steps.target.outputs.overlay_path }}/kustomization.yaml"
           if git diff --cached --quiet; then
-            echo "No release branch changes to commit."
+            echo "No promotion changes to commit."
+            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
           else
             git commit -m "Promote ${{ inputs.target_environment }} to ${{ steps.target.outputs.image_tag }}"
+            echo "has_changes=true" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Push release branch
-        run: git push origin "HEAD:${{ steps.target.outputs.release_branch }}" --force
+      - name: Push promotion branch
+        if: ${{ steps.commit.outputs.has_changes == 'true' }}
+        run: git push origin "HEAD:${{ steps.target.outputs.promotion_branch }}" --force
+
+      - name: Open release pull request
+        if: ${{ steps.commit.outputs.has_changes == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing_pr="$(gh pr list \
+            --head "${{ steps.target.outputs.promotion_branch }}" \
+            --base release \
+            --state open \
+            --json number \
+            --jq '.[0].number')"
+
+          if [ -n "${existing_pr}" ]; then
+            echo "Promotion PR already exists: #${existing_pr}"
+            exit 0
+          fi
+
+          gh pr create \
+            --base release \
+            --head "${{ steps.target.outputs.promotion_branch }}" \
+            --title "Promote ${{ inputs.target_environment }} to ${{ steps.target.outputs.image_tag }}" \
+            --body "Promotes \`${{ inputs.target_environment }}\` to Docker image tag \`${{ steps.target.outputs.image_tag }}\`.
+
+          Source ref: \`${{ inputs.source_ref }}\`
+          Source commit: \`${{ steps.target.outputs.short_sha }}\`
+
+          After this PR is approved and merged into \`release\`, ArgoCD will sync the selected overlay automatically."
 
       - name: Write promotion summary
         run: |
           {
-            echo "### Release promotion"
+            echo "### Release promotion PR"
             echo ""
             echo "- Environment: \`${{ inputs.target_environment }}\`"
-            echo "- Release branch: \`${{ steps.target.outputs.release_branch }}\`"
+            echo "- Base branch: \`release\`"
+            echo "- Promotion branch: \`${{ steps.target.outputs.promotion_branch }}\`"
             echo "- Source commit: \`${{ steps.target.outputs.short_sha }}\`"
             echo "- Image tag: \`${{ steps.target.outputs.image_tag }}\`"
+            echo "- Changes created: \`${{ steps.commit.outputs.has_changes }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"

@@ -1,0 +1,39 @@
+name: Release Checks
+
+on:
+  pull_request:
+    branches:
+      - release
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  kubernetes-render:
+    name: Kubernetes render
+    uses: ./.github/workflows/check-kubernetes-render.yml
+
+  kubernetes-schema:
+    name: Kubernetes schema validation
+    uses: ./.github/workflows/check-kubernetes-schema.yml
+
+  kubernetes-lint:
+    name: Kubernetes lint
+    uses: ./.github/workflows/check-kubernetes-lint.yml
+
+  kubernetes-policy:
+    name: Kubernetes project policy
+    uses: ./.github/workflows/check-kubernetes-policy.yml
+
+  argocd-policy:
+    name: ArgoCD manifest policy
+    uses: ./.github/workflows/check-argocd-policy.yml
+
+  release-image-tags:
+    name: Release image tags
+    uses: ./.github/workflows/check-release-image-tags.yml
