@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ALLOWED_FILES = {
-    Path("k8s/overlays/dev/kustomization.yaml"),
+    Path("k8s/overlays/staging/kustomization.yaml"),
     Path("k8s/overlays/production-blue/kustomization.yaml"),
     Path("k8s/overlays/production-green/kustomization.yaml"),
 }

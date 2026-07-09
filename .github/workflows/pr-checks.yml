@@ -18,6 +18,10 @@ jobs:
     name: Backend dependency consistency
     uses: ./.github/workflows/check-backend-dependencies.yml
 
+  backend-lint:
+    name: Backend lint
+    uses: ./.github/workflows/check-backend-lint.yml
+
   backend-tests:
     name: Backend tests
     uses: ./.github/workflows/check-backend-tests.yml

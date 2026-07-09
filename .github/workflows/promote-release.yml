@@ -8,7 +8,7 @@ on:
         required: true
         type: choice
         options:
-          - dev
+          - staging
           - production-blue
           - production-green
       source_ref:
@@ -66,8 +66,8 @@ jobs:
           image_tag="${IMAGE_TAG_INPUT:-sha-${short_sha}}"
 
           case "${TARGET_ENVIRONMENT}" in
-            dev)
-              overlay_path="k8s/overlays/dev"
+            staging)
+              overlay_path="k8s/overlays/staging"
               ;;
             production-blue)
               overlay_path="k8s/overlays/production-blue"
