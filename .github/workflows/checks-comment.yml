@@ -1,0 +1,39 @@
+name: Checks Comment
+
+on:
+  workflow_run:
+    workflows:
+      - PR Checks
+      - Release Checks
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  comment-on-failure:
+    name: Comment on failed checks
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+
+    steps:
+      - name: Add failure comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUESTS_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          pr_numbers="$(echo "${PULL_REQUESTS_JSON}" | jq -r '.[].number')"
+
+          if [ -z "${pr_numbers}" ]; then
+            echo "No pull requests were attached to this workflow run."
+            exit 0
+          fi
+
+          for pr_number in ${pr_numbers}; do
+            gh pr comment "${pr_number}" \
+              --repo "${{ github.repository }}" \
+              --body "Validation failed in \`${{ github.event.workflow_run.name }}\`. Please review the failed check details here: ${RUN_URL}"
+          done

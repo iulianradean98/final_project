@@ -1,0 +1,86 @@
+name: Deploy Staging
+
+on:
+  workflow_run:
+    workflows:
+      - Docker Publish
+    branches:
+      - main
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+jobs:
+  deploy-staging:
+    name: Update staging deployment branch
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Compute staging image tag
+        id: image
+        run: |
+          source_commit="$(git rev-parse HEAD)"
+          short_sha="${source_commit:0:12}"
+          echo "source_commit=${source_commit}" >> "${GITHUB_OUTPUT}"
+          echo "image_tag=sha-${short_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch deployment branches
+        run: git fetch origin "+refs/heads/*:refs/remotes/origin/*"
+
+      - name: Prepare staging branch
+        run: |
+          if git rev-parse --verify --quiet origin/staging >/dev/null; then
+            git switch --force-create staging origin/staging
+            git rm -r --ignore-unmatch .
+            git checkout "${{ steps.image.outputs.source_commit }}" -- .
+          else
+            git switch --force-create staging "${{ steps.image.outputs.source_commit }}"
+          fi
+
+      - name: Pin staging image tag
+        run: python scripts/set_kustomize_images.py k8s/overlays/staging/kustomization.yaml "${{ steps.image.outputs.image_tag }}"
+
+      - name: Commit staging deployment state
+        id: commit
+        run: |
+          git add k8s/overlays/staging/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "No staging deployment changes to commit."
+            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
+          else
+            git commit -m "Deploy staging ${{ steps.image.outputs.image_tag }}"
+            echo "has_changes=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Push staging branch
+        if: ${{ steps.commit.outputs.has_changes == 'true' }}
+        run: git push origin HEAD:staging
+
+      - name: Write deployment summary
+        run: |
+          {
+            echo "### Staging deployment"
+            echo ""
+            echo "- Source commit: \`${{ steps.image.outputs.source_commit }}\`"
+            echo "- Image tag: \`${{ steps.image.outputs.image_tag }}\`"
+            echo "- Target branch: \`staging\`"
+            echo "- Changes created: \`${{ steps.commit.outputs.has_changes }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

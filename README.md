@@ -86,11 +86,11 @@ ArgoCD bootstrap manifests live in `argocd/bootstrap`, and child application man
 The ArgoCD structure follows an app-of-apps pattern:
 
 - `recipe-rescue-root` watches `argocd/applications`.
-- `recipe-rescue-staging` syncs `k8s/overlays/staging` from `release`.
+- `recipe-rescue-staging` syncs `k8s/overlays/staging` from `staging`.
 - `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release`.
 - `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release`.
 
-The single `release` branch stores the approved deployment state. The `Promote Release` workflow prepares a promotion branch, pins the selected overlay to an immutable Docker image tag, and opens a PR into `release`. After that PR is approved and merged, ArgoCD syncs the selected overlay automatically.
+The `staging` branch stores the automatically deployed staging state after Docker images are published from `main`. The single `release` branch stores the manually approved production deployment state. The `Promote Release` workflow opens a PR from `main` into `release`; after that PR is approved and merged, ArgoCD reconciles the production applications from `release`.
 
 ArgoCD manifests are checked in CI with:
 
@@ -118,27 +118,34 @@ The reusable PR checks are:
 - backend Docker image build
 - frontend Docker image build
 
-Pushes to `main` publish Docker images to Docker Hub. Deployment is handled separately by the manual `Promote Release` workflow, which opens a PR into the `release` branch watched by ArgoCD:
+Pushes to `main` start the deployment side of the lifecycle:
 
-1. Resolve the source commit and Docker image tag.
-2. Start from `origin/release`.
-3. Pin the selected overlay to `sha-<12-character-commit-sha>`.
-4. Open a PR into `release`.
-5. Wait for release branch checks and human approval.
-6. Merge into `release`, then ArgoCD syncs from that approved branch.
+1. `Docker Publish` builds and pushes frontend/backend images to Docker Hub.
+2. `Deploy Staging` runs after Docker publishing succeeds.
+3. `Deploy Staging` pins `k8s/overlays/staging` to the new `sha-<12-character-commit-sha>` image tag.
+4. It pushes a normal commit to the `staging` branch.
+5. ArgoCD syncs the staging application from the `staging` branch.
+
+The `staging` branch is an automated deployment-state branch. It should not require manual PR approval, because it is updated by the `Deploy Staging` workflow after `main` has passed PR checks and Docker image publishing. If branch protection is enabled for `staging`, allow GitHub Actions to push to it.
+
+Production promotion is manual:
+
+1. Run the `Promote Release` workflow.
+2. The workflow opens a normal PR from `main` into `release`.
+3. Wait for release branch checks and human approval.
+4. Merge into `release`, then ArgoCD syncs production from that approved branch.
 
 Protect the `release` branch with required PR review, required release checks, blocked force pushes, and restricted direct pushes. That makes deployment approval happen through the release PR.
 
 Create the `release` branch once from `main` after the CI/CD workflow files are merged, then protect it. GitHub uses workflow files from the target branch for PR checks, so the release branch must contain `release-checks.yml` before promotion PRs can be validated.
 
-Pull requests into `release` run deployment-focused checks only:
+Pull requests into `release` run deployment-readiness checks:
 
-- release changed-files policy
-- release image tag validation
-- promoted Docker image existence
-- promoted overlay render
-
-The Docker image existence check expects the selected `sha-<12-character-commit-sha>` image tag to already exist in Docker Hub, so run promotion only after the `Docker Publish` workflow has completed successfully on `main`.
+- Kubernetes render
+- Kubernetes schema validation
+- Kubernetes lint
+- Kubernetes project policy
+- ArgoCD manifest policy
 
 ## Application Pages
 
