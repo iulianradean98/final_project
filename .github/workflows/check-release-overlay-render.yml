@@ -1,0 +1,24 @@
+name: Check Release Overlay Render
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  release-overlay-render:
+    name: Release overlay render
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release branch
+        run: git fetch origin release:refs/remotes/origin/release
+
+      - name: Render promoted overlay
+        run: python scripts/render_release_overlay.py
