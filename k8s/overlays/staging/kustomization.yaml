@@ -23,3 +23,8 @@ patches:
       - op: replace
         path: /data/ALLOWED_ORIGINS
         value: '["http://localhost:3001","http://recipe-rescue-staging.local"]'
+images:
+  - name: iulian98/recipe-rescue-backend
+    newTag: sha-2e07e4a62a88
+  - name: iulian98/recipe-rescue-frontend
+    newTag: sha-2e07e4a62a88
