@@ -98,6 +98,21 @@ ArgoCD manifests are checked in CI with:
 python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applications/*.yaml
 ```
 
+## AWS Infrastructure
+
+Terraform infrastructure code lives in `infra/terraform/aws`. The first AWS layer creates a project VPC and an Amazon EKS cluster where ArgoCD and the Kubernetes application environments will run.
+
+Start with:
+
+```bash
+cd infra/terraform/aws
+copy terraform.tfvars.example terraform.tfvars
+terraform init
+terraform plan
+```
+
+See `infra/terraform/aws/README.md` for the full explanation of the Terraform files, AWS resources, and next deployment steps.
+
 ## CI/CD Flow
 
 Pull requests to `main` run one orchestrator workflow named `PR Checks`. That workflow calls separate reusable check workflows from the `.github/workflows/check-*.yml` files, so the GitHub UI stays organized while each validation still has its own focused YAML file.
