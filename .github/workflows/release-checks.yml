@@ -14,18 +14,22 @@ permissions:
   contents: read
 
 jobs:
-  release-changed-files:
-    name: Release changed files
-    uses: ./.github/workflows/check-release-changed-files.yml
+  kubernetes-render:
+    name: Kubernetes render
+    uses: ./.github/workflows/check-kubernetes-render.yml
 
-  release-image-tags:
-    name: Release image tags
-    uses: ./.github/workflows/check-release-image-tags.yml
+  kubernetes-schema:
+    name: Kubernetes schema validation
+    uses: ./.github/workflows/check-kubernetes-schema.yml
 
-  release-images-exist:
-    name: Release Docker images exist
-    uses: ./.github/workflows/check-release-images-exist.yml
+  kubernetes-lint:
+    name: Kubernetes lint
+    uses: ./.github/workflows/check-kubernetes-lint.yml
 
-  release-overlay-render:
-    name: Release overlay render
-    uses: ./.github/workflows/check-release-overlay-render.yml
+  kubernetes-policy:
+    name: Kubernetes project policy
+    uses: ./.github/workflows/check-kubernetes-policy.yml
+
+  argocd-policy:
+    name: ArgoCD manifest policy
+    uses: ./.github/workflows/check-argocd-policy.yml

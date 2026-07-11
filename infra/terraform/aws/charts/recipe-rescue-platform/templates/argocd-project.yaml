@@ -6,7 +6,7 @@ metadata:
 spec:
   description: Recipe Rescue GitOps project
   sourceRepos:
-    - https://github.com/iulianradean98/final_project.git
+    - {{ .Values.repoUrl | quote }}
   destinations:
     - namespace: argocd
       server: https://kubernetes.default.svc
