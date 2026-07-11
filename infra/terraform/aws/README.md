@@ -10,6 +10,8 @@ It creates:
 - one NAT Gateway for private worker node internet access
 - one Amazon EKS cluster
 - one EKS managed node group for running ArgoCD, frontend, backend, and PostgreSQL
+- AWS EBS CSI Driver for dynamic Kubernetes persistent volumes
+- encrypted default `gp3` Kubernetes StorageClass
 - ArgoCD installed with Helm
 - External Secrets Operator installed with Helm
 - EKS Pod Identity for External Secrets Operator
@@ -28,6 +30,7 @@ Terraform lets us describe infrastructure in files instead of creating it manual
 - `main.tf`: creates the VPC and EKS cluster using official community Terraform modules.
 - `helm.tf`: installs ArgoCD, External Secrets Operator, and the small Recipe Rescue platform bootstrap chart.
 - `external-secrets.tf`: creates the IAM role and EKS Pod Identity association that allow External Secrets Operator to read `recipe-rescue/*` secrets from AWS Secrets Manager.
+- `ebs-csi.tf`: installs the AWS EBS CSI Driver and default encrypted `gp3` StorageClass used by PostgreSQL PVCs.
 - `outputs.tf`: prints useful values after deployment, including the `aws eks update-kubeconfig` command.
 - `terraform.tfvars.example`: safe example values. Copy it to `terraform.tfvars` locally and adjust if needed.
 - `charts/recipe-rescue-platform`: local Helm chart for cluster bootstrap resources that depend on ArgoCD and External Secrets CRDs.
@@ -39,10 +42,10 @@ This is a real AWS EKS environment, not a free-tier-only environment. EKS has a 
 
 The default variables are intentionally professional for a final DevOps presentation:
 
-- two `t3.small` worker nodes by default
+- four `t3.small` worker nodes by default, with a minimum of two
 - worker nodes placed in private subnets
 - one shared NAT Gateway for private subnet internet egress
-- maximum node count limited to `3`
+- maximum node count limited to `4`
 
 This is more expensive than the lowest-cost demo mode, but it is easier to justify architecturally because application workloads are not placed directly in public subnets.
 
