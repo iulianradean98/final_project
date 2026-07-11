@@ -24,3 +24,17 @@ patches:
       - op: replace
         path: /data/ALLOWED_ORIGINS
         value: '["https://blue.recipe-rescue.local"]'
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: recipe-rescue-postgres
+        namespace: recipe-rescue
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: recipe-rescue-postgres
+        namespace: recipe-rescue
+      $patch: delete
