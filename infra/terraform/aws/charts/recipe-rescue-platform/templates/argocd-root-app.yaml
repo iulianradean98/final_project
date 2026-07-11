@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: recipe-rescue-root
+  namespace: argocd
+spec:
+  project: recipe-rescue
+  source:
+    repoURL: {{ .Values.repoUrl | quote }}
+    targetRevision: {{ .Values.rootTargetRevision | quote }}
+    path: argocd/applications
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

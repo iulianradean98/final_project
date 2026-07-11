@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: recipe-rescue-staging
+  name: recipe-rescue-production-data
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -9,11 +9,11 @@ spec:
   project: recipe-rescue
   source:
     repoURL: https://github.com/iulianradean98/final_project.git
-    targetRevision: staging
-    path: k8s/overlays/staging
+    targetRevision: release
+    path: k8s/overlays/production-data
   destination:
     server: https://kubernetes.default.svc
-    namespace: recipe-rescue-staging
+    namespace: recipe-rescue-production-data
   syncPolicy:
     automated:
       prune: true
