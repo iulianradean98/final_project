@@ -10,6 +10,10 @@ It creates:
 - one NAT Gateway for private worker node internet access
 - one Amazon EKS cluster
 - one EKS managed node group for running ArgoCD, frontend, backend, and PostgreSQL
+- ArgoCD installed with Helm
+- External Secrets Operator installed with Helm
+- EKS Pod Identity for External Secrets Operator
+- an ArgoCD repository credential synced from AWS Secrets Manager
 
 ## Why Terraform
 
@@ -22,8 +26,11 @@ Terraform lets us describe infrastructure in files instead of creating it manual
 - `variables.tf`: defines configurable inputs such as region, VPC CIDR, Kubernetes version, and node sizes.
 - `locals.tf`: computes shared names, selected availability zones, and common tags.
 - `main.tf`: creates the VPC and EKS cluster using official community Terraform modules.
+- `helm.tf`: installs ArgoCD, External Secrets Operator, and the small Recipe Rescue platform bootstrap chart.
+- `external-secrets.tf`: creates the IAM role and EKS Pod Identity association that allow External Secrets Operator to read `recipe-rescue/*` secrets from AWS Secrets Manager.
 - `outputs.tf`: prints useful values after deployment, including the `aws eks update-kubeconfig` command.
 - `terraform.tfvars.example`: safe example values. Copy it to `terraform.tfvars` locally and adjust if needed.
+- `charts/recipe-rescue-platform`: local Helm chart for cluster bootstrap resources that depend on ArgoCD and External Secrets CRDs.
 - `scripts/destroy-infra.ps1`: guided cleanup script that creates a destroy plan and asks for confirmation before deleting infrastructure.
 
 ## Important Cost Note
@@ -101,6 +108,15 @@ Create the infrastructure:
 terraform apply
 ```
 
+If ArgoCD was previously installed manually with `kubectl apply`, remove only the manual bootstrap before applying the Terraform-managed platform services:
+
+```bash
+kubectl delete namespace argocd
+kubectl delete namespace recipe-rescue-staging
+```
+
+Do not destroy the whole EKS cluster for this. The namespace deletion removes the temporary manual ArgoCD install and temporary staging secrets so Terraform and External Secrets Operator can recreate them cleanly.
+
 After the apply succeeds, configure kubectl using the output command:
 
 ```bash
@@ -157,7 +173,7 @@ This is not a full enterprise security platform yet. Later hardening can add AWS
 
 After EKS exists, the next phase is:
 
-1. Install ArgoCD into the cluster.
-2. Apply the ArgoCD bootstrap manifests.
-3. Create Kubernetes Secrets for PostgreSQL and backend settings.
-4. Let ArgoCD sync staging from the `staging` branch.
+1. Let ArgoCD sync staging from the `staging` branch.
+2. Promote to `release` when production blue/green is ready.
+
+ArgoCD and External Secrets Operator are installed by Terraform, not manually.

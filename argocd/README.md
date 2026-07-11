@@ -20,6 +20,8 @@ kubectl apply -f argocd/bootstrap/recipe-rescue-project.yaml
 kubectl apply -f argocd/bootstrap/recipe-rescue-root-app.yaml
 ```
 
+In the AWS/EKS environment, ArgoCD itself is installed by Terraform using Helm. Terraform also installs External Secrets Operator and creates the ArgoCD repository credential from AWS Secrets Manager.
+
 The root app then creates the staging, production-data, production-blue, and production-green ArgoCD Applications from Git.
 
 Production uses one shared database namespace plus two application color namespaces:

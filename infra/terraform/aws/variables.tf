@@ -97,3 +97,39 @@ variable "node_max_size" {
   type        = number
   default     = 3
 }
+
+variable "argocd_chart_version" {
+  description = "Version of the argo-cd Helm chart to install."
+  type        = string
+  default     = "10.1.3"
+}
+
+variable "external_secrets_chart_version" {
+  description = "Version of the external-secrets Helm chart to install."
+  type        = string
+  default     = "2.7.0"
+}
+
+variable "argocd_github_repo_secret_name" {
+  description = "AWS Secrets Manager secret containing ArgoCD Git repository credentials."
+  type        = string
+  default     = "recipe-rescue/argocd/github-repo"
+}
+
+variable "github_repo_url" {
+  description = "Git repository URL watched by ArgoCD."
+  type        = string
+  default     = "https://github.com/iulianradean98/final_project.git"
+}
+
+variable "argocd_root_target_revision" {
+  description = "Git revision used by the ArgoCD root application."
+  type        = string
+  default     = "main"
+}
+
+variable "secrets_manager_prefix" {
+  description = "Secrets Manager path prefix that External Secrets Operator is allowed to read."
+  type        = string
+  default     = "recipe-rescue/"
+}

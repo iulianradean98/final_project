@@ -2,7 +2,7 @@
 
 Real secret values must not be committed to Git.
 
-Recipe Rescue uses AWS Secrets Manager as the source of truth for cloud secrets. Kubernetes Secrets are created from those AWS secrets during deployment, initially by bootstrap commands and later through External Secrets Operator.
+Recipe Rescue uses AWS Secrets Manager as the source of truth for cloud secrets. Kubernetes Secrets are created from those AWS secrets by External Secrets Operator.
 
 The intended AWS Secrets Manager entries are:
 
@@ -20,3 +20,11 @@ Expected Kubernetes Secrets:
 - `recipe-rescue-blue/recipe-rescue-api-secret`
 - `recipe-rescue-green/recipe-rescue-api-secret`
 - `argocd/recipe-rescue-repo`
+
+How the flow works:
+
+1. Terraform installs External Secrets Operator.
+2. Terraform gives the operator AWS access using EKS Pod Identity and a least-privilege IAM role.
+3. Terraform creates a `ClusterSecretStore` named `recipe-rescue-aws-secrets`.
+4. Kustomize overlays define `ExternalSecret` resources.
+5. External Secrets Operator reads AWS Secrets Manager and creates normal Kubernetes Secrets for the pods.
