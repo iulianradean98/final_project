@@ -7,6 +7,7 @@ This directory prepares Recipe Rescue for ArgoCD-based continuous delivery.
 - `bootstrap/recipe-rescue-project.yaml`: creates the ArgoCD project and limits where this application is allowed to deploy.
 - `bootstrap/recipe-rescue-root-app.yaml`: root app-of-apps that syncs the child ArgoCD Applications from `argocd/applications`.
 - `applications/recipe-rescue-staging.yaml`: syncs `k8s/overlays/staging` from `staging`.
+- `applications/recipe-rescue-production-data.yaml`: syncs the shared production PostgreSQL database from `release`.
 - `applications/recipe-rescue-production-blue.yaml`: syncs `k8s/overlays/production-blue` from `release`.
 - `applications/recipe-rescue-production-green.yaml`: syncs `k8s/overlays/production-green` from `release`.
 
@@ -19,7 +20,17 @@ kubectl apply -f argocd/bootstrap/recipe-rescue-project.yaml
 kubectl apply -f argocd/bootstrap/recipe-rescue-root-app.yaml
 ```
 
-The root app then creates the staging, production-blue, and production-green ArgoCD Applications from Git.
+In the AWS/EKS environment, ArgoCD itself is installed by Terraform using Helm. Terraform also installs External Secrets Operator and creates the ArgoCD repository credential from AWS Secrets Manager.
+
+The root app then creates the staging, production-data, production-blue, and production-green ArgoCD Applications from Git.
+
+Production uses one shared database namespace plus two application color namespaces:
+
+- `recipe-rescue-production-data`: shared production PostgreSQL.
+- `recipe-rescue-blue`: blue frontend/backend.
+- `recipe-rescue-green`: green frontend/backend.
+
+Blue and green should use the same production database connection string so traffic can switch between application colors without splitting production data.
 
 The child applications are configured for automated sync, prune, and self-heal. Staging is updated automatically through the `Deploy Staging` workflow after Docker images are published from `main`; ArgoCD watches the `staging` branch for that environment. Manual production approval happens through a protected PR from `main` into the single `release` branch. After the PR is approved and merged, ArgoCD automatically reconciles production from `release`.
 

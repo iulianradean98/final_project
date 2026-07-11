@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
+  - api-external-secret.yaml
 namespace: recipe-rescue-green
 labels:
   - includeSelectors: true
@@ -24,3 +25,17 @@ patches:
       - op: replace
         path: /data/ALLOWED_ORIGINS
         value: '["https://green.recipe-rescue.local"]'
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: recipe-rescue-postgres
+        namespace: recipe-rescue
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: recipe-rescue-postgres
+        namespace: recipe-rescue
+      $patch: delete

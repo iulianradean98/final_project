@@ -59,13 +59,14 @@ Kubernetes manifests live in `k8s/base` and `k8s/overlays` and define the first 
 - PostgreSQL persistent volume claim template
 - application ConfigMap
 - liveness and readiness probes
-- staging, production-blue, and production-green overlays
+- staging, production-data, production-blue, and production-green overlays
 
 The Kubernetes manifests are rendered in CI with:
 
 ```bash
 kubectl kustomize k8s/base
 kubectl kustomize k8s/overlays/staging
+kubectl kustomize k8s/overlays/production-data
 kubectl kustomize k8s/overlays/production-blue
 kubectl kustomize k8s/overlays/production-green
 kubeconform -strict -summary -ignore-missing-schemas rendered-manifests/*.yaml
@@ -75,9 +76,17 @@ python scripts/check_k8s_policies.py rendered-manifests/*.yaml
 
 The CI policy checks verify practical cluster-free rules: rendered manifests must not contain real Secrets, workload containers must define liveness/readiness probes and CPU/memory requests and limits, and Services must select an existing workload. kube-linter currently defers immutable image tag and full container runtime hardening checks until the GitOps image promotion phase.
 
-The blue-green structure currently uses separate namespaces: `recipe-rescue-blue` and `recipe-rescue-green`. This keeps both production colors isolated and ready for a later ArgoCD/AWS traffic-switching layer.
+The production blue-green structure separates application traffic from production data:
+
+- `recipe-rescue-production-data`: the single shared production PostgreSQL database.
+- `recipe-rescue-blue`: the blue production frontend/backend application color.
+- `recipe-rescue-green`: the green production frontend/backend application color.
+
+This keeps both production application colors isolated while avoiding two separate production databases. Blue and green are expected to connect to the same production database service in `recipe-rescue-production-data`.
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
+
+For AWS/EKS, real secret values live in AWS Secrets Manager. External Secrets Operator reads those values and creates Kubernetes Secrets in the correct namespaces. This keeps passwords and GitHub tokens out of Git and out of ArgoCD manifests.
 
 ## ArgoCD GitOps
 
@@ -87,6 +96,7 @@ The ArgoCD structure follows an app-of-apps pattern:
 
 - `recipe-rescue-root` watches `argocd/applications`.
 - `recipe-rescue-staging` syncs `k8s/overlays/staging` from `staging`.
+- `recipe-rescue-production-data` syncs `k8s/overlays/production-data` from `release`.
 - `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release`.
 - `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release`.
 
@@ -97,6 +107,27 @@ ArgoCD manifests are checked in CI with:
 ```bash
 python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applications/*.yaml
 ```
+
+## AWS Infrastructure
+
+Terraform infrastructure code lives in `infra/terraform/aws`. The first AWS layer creates a project VPC and an Amazon EKS cluster where ArgoCD and the Kubernetes application environments will run.
+
+Terraform also installs the cluster platform services used by the deployment flow:
+
+- ArgoCD through Helm
+- External Secrets Operator through Helm
+- EKS Pod Identity permissions for reading AWS Secrets Manager
+
+Start with:
+
+```bash
+cd infra/terraform/aws
+copy terraform.tfvars.example terraform.tfvars
+terraform init
+terraform plan
+```
+
+See `infra/terraform/aws/README.md` for the full explanation of the Terraform files, AWS resources, and next deployment steps.
 
 ## CI/CD Flow
 

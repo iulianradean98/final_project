@@ -2,6 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
+  - api-external-secret.yaml
+  - postgres-external-secret.yaml
 namespace: recipe-rescue-staging
 labels:
   - includeSelectors: true
@@ -25,6 +27,6 @@ patches:
         value: '["http://localhost:3001","http://recipe-rescue-staging.local"]'
 images:
   - name: iulian98/recipe-rescue-backend
-    newTag: sha-2e07e4a62a88
+    newTag: sha-60f685a49df8
   - name: iulian98/recipe-rescue-frontend
-    newTag: sha-2e07e4a62a88
+    newTag: sha-60f685a49df8
