@@ -59,13 +59,14 @@ Kubernetes manifests live in `k8s/base` and `k8s/overlays` and define the first 
 - PostgreSQL persistent volume claim template
 - application ConfigMap
 - liveness and readiness probes
-- staging, production-blue, and production-green overlays
+- staging, production-data, production-blue, and production-green overlays
 
 The Kubernetes manifests are rendered in CI with:
 
 ```bash
 kubectl kustomize k8s/base
 kubectl kustomize k8s/overlays/staging
+kubectl kustomize k8s/overlays/production-data
 kubectl kustomize k8s/overlays/production-blue
 kubectl kustomize k8s/overlays/production-green
 kubeconform -strict -summary -ignore-missing-schemas rendered-manifests/*.yaml
@@ -75,9 +76,17 @@ python scripts/check_k8s_policies.py rendered-manifests/*.yaml
 
 The CI policy checks verify practical cluster-free rules: rendered manifests must not contain real Secrets, workload containers must define liveness/readiness probes and CPU/memory requests and limits, and Services must select an existing workload. kube-linter currently defers immutable image tag and full container runtime hardening checks until the GitOps image promotion phase.
 
-The blue-green structure currently uses separate namespaces: `recipe-rescue-blue` and `recipe-rescue-green`. This keeps both production colors isolated and ready for a later ArgoCD/AWS traffic-switching layer.
+The production blue-green structure separates application traffic from production data:
+
+- `recipe-rescue-production-data`: the single shared production PostgreSQL database.
+- `recipe-rescue-blue`: the blue production frontend/backend application color.
+- `recipe-rescue-green`: the green production frontend/backend application color.
+
+This keeps both production application colors isolated while avoiding two separate production databases. Blue and green are expected to connect to the same production database service in `recipe-rescue-production-data`.
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
+
+For AWS/EKS, real secret values live in AWS Secrets Manager. External Secrets Operator reads those values and creates Kubernetes Secrets in the correct namespaces. This keeps passwords and GitHub tokens out of Git and out of ArgoCD manifests.
 
 ## ArgoCD GitOps
 
@@ -86,17 +95,39 @@ ArgoCD bootstrap manifests live in `argocd/bootstrap`, and child application man
 The ArgoCD structure follows an app-of-apps pattern:
 
 - `recipe-rescue-root` watches `argocd/applications`.
-- `recipe-rescue-staging` syncs `k8s/overlays/staging` from `release`.
+- `recipe-rescue-staging` syncs `k8s/overlays/staging` from `staging`.
+- `recipe-rescue-production-data` syncs `k8s/overlays/production-data` from `release`.
 - `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release`.
 - `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release`.
 
-The single `release` branch stores the approved deployment state. The `Promote Release` workflow prepares a promotion branch, pins the selected overlay to an immutable Docker image tag, and opens a PR into `release`. After that PR is approved and merged, ArgoCD syncs the selected overlay automatically.
+The `staging` branch stores the automatically deployed staging state after Docker images are published from `main`. The single `release` branch stores the manually approved production deployment state. The `Promote Release` workflow opens a PR from `main` into `release`; after that PR is approved and merged, ArgoCD reconciles the production applications from `release`.
 
 ArgoCD manifests are checked in CI with:
 
 ```bash
 python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applications/*.yaml
 ```
+
+## AWS Infrastructure
+
+Terraform infrastructure code lives in `infra/terraform/aws`. The first AWS layer creates a project VPC and an Amazon EKS cluster where ArgoCD and the Kubernetes application environments will run.
+
+Terraform also installs the cluster platform services used by the deployment flow:
+
+- ArgoCD through Helm
+- External Secrets Operator through Helm
+- EKS Pod Identity permissions for reading AWS Secrets Manager
+
+Start with:
+
+```bash
+cd infra/terraform/aws
+copy terraform.tfvars.example terraform.tfvars
+terraform init
+terraform plan
+```
+
+See `infra/terraform/aws/README.md` for the full explanation of the Terraform files, AWS resources, and next deployment steps.
 
 ## CI/CD Flow
 
@@ -118,27 +149,34 @@ The reusable PR checks are:
 - backend Docker image build
 - frontend Docker image build
 
-Pushes to `main` publish Docker images to Docker Hub. Deployment is handled separately by the manual `Promote Release` workflow, which opens a PR into the `release` branch watched by ArgoCD:
+Pushes to `main` start the deployment side of the lifecycle:
 
-1. Resolve the source commit and Docker image tag.
-2. Start from `origin/release`.
-3. Pin the selected overlay to `sha-<12-character-commit-sha>`.
-4. Open a PR into `release`.
-5. Wait for release branch checks and human approval.
-6. Merge into `release`, then ArgoCD syncs from that approved branch.
+1. `Docker Publish` builds and pushes frontend/backend images to Docker Hub.
+2. `Deploy Staging` runs after Docker publishing succeeds.
+3. `Deploy Staging` pins `k8s/overlays/staging` to the new `sha-<12-character-commit-sha>` image tag.
+4. It pushes a normal commit to the `staging` branch.
+5. ArgoCD syncs the staging application from the `staging` branch.
+
+The `staging` branch is an automated deployment-state branch. It should not require manual PR approval, because it is updated by the `Deploy Staging` workflow after `main` has passed PR checks and Docker image publishing. If branch protection is enabled for `staging`, allow GitHub Actions to push to it.
+
+Production promotion is manual:
+
+1. Run the `Promote Release` workflow.
+2. The workflow opens a normal PR from `main` into `release`.
+3. Wait for release branch checks and human approval.
+4. Merge into `release`, then ArgoCD syncs production from that approved branch.
 
 Protect the `release` branch with required PR review, required release checks, blocked force pushes, and restricted direct pushes. That makes deployment approval happen through the release PR.
 
 Create the `release` branch once from `main` after the CI/CD workflow files are merged, then protect it. GitHub uses workflow files from the target branch for PR checks, so the release branch must contain `release-checks.yml` before promotion PRs can be validated.
 
-Pull requests into `release` run deployment-focused checks only:
+Pull requests into `release` run deployment-readiness checks:
 
-- release changed-files policy
-- release image tag validation
-- promoted Docker image existence
-- promoted overlay render
-
-The Docker image existence check expects the selected `sha-<12-character-commit-sha>` image tag to already exist in Docker Hub, so run promotion only after the `Docker Publish` workflow has completed successfully on `main`.
+- Kubernetes render
+- Kubernetes schema validation
+- Kubernetes lint
+- Kubernetes project policy
+- ArgoCD manifest policy
 
 ## Application Pages
 
