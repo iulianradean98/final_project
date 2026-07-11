@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   open-release-pr:
-    name: Open main to release PR
+    name: Open rebase-friendly release PR
     runs-on: ubuntu-latest
 
     steps:
@@ -31,12 +31,39 @@ jobs:
             exit 1
           fi
 
+      - name: Create release promotion branch
+        run: |
+          set -euo pipefail
+
+          promotion_branch="release-promotion"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git switch -C "${promotion_branch}" origin/release
+          git rm -r --ignore-unmatch .
+          git checkout origin/main -- .
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Release already matches main. No promotion PR is needed."
+            echo "promotion_needed=false" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          git commit -m "Promote main to release"
+          git push --force-with-lease origin "${promotion_branch}:${promotion_branch}"
+
+          echo "promotion_needed=true" >> "${GITHUB_ENV}"
+          echo "promotion_branch=${promotion_branch}" >> "${GITHUB_ENV}"
+
       - name: Open release pull request
+        if: env.promotion_needed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           existing_pr="$(gh pr list \
-            --head main \
+            --head "${promotion_branch}" \
             --base release \
             --state open \
             --json number \
@@ -49,9 +76,11 @@ jobs:
 
           gh pr create \
             --base release \
-            --head main \
+            --head "${promotion_branch}" \
             --title "Promote main to release" \
             --body "Promotes the validated main branch into the protected release branch.
+
+          This workflow creates a short-lived promotion branch based on \`release\`, then applies the current \`main\` file tree as one commit. That keeps the PR compatible with rebase/linear-history branch protection.
 
           After this PR is approved and merged, ArgoCD will reconcile the production applications from \`release\`."
 
@@ -62,5 +91,6 @@ jobs:
             echo ""
             echo "- Source branch: \`main\`"
             echo "- Target branch: \`release\`"
+            echo "- Promotion branch: \`${promotion_branch:-not created}\`"
             echo "- Approval gate: protected release PR"
           } >> "${GITHUB_STEP_SUMMARY}"
