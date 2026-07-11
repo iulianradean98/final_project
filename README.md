@@ -86,6 +86,8 @@ This keeps both production application colors isolated while avoiding two separa
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
+For AWS/EKS, real secret values live in AWS Secrets Manager. External Secrets Operator reads those values and creates Kubernetes Secrets in the correct namespaces. This keeps passwords and GitHub tokens out of Git and out of ArgoCD manifests.
+
 ## ArgoCD GitOps
 
 ArgoCD bootstrap manifests live in `argocd/bootstrap`, and child application manifests live in `argocd/applications`.
@@ -109,6 +111,12 @@ python scripts/check_argocd_manifests.py argocd/bootstrap/*.yaml argocd/applicat
 ## AWS Infrastructure
 
 Terraform infrastructure code lives in `infra/terraform/aws`. The first AWS layer creates a project VPC and an Amazon EKS cluster where ArgoCD and the Kubernetes application environments will run.
+
+Terraform also installs the cluster platform services used by the deployment flow:
+
+- ArgoCD through Helm
+- External Secrets Operator through Helm
+- EKS Pod Identity permissions for reading AWS Secrets Manager
 
 Start with:
 
