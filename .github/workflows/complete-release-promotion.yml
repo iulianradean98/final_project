@@ -189,7 +189,7 @@ jobs:
           This PR is being closed because the release branch was promoted directly after approval and passing checks."
 
           if ! gh pr close "${PR_NUMBER}"; then
-            echo "::warning::Release was promoted, but GitHub did not allow the workflow to close PR #${PR_NUMBER}. Close it manually after confirming release matches main."
+            echo "::notice::Release was promoted, but GitHub did not allow the workflow to close PR #${PR_NUMBER}. This can happen when GitHub already considers the PR completed because release now points to main."
           fi
 
       - name: Write promotion summary
