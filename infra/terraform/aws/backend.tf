@@ -1,0 +1,9 @@
+terraform {
+  backend "s3" {
+    bucket       = "recipe-rescue-terraform-state-iulian-2026"
+    key          = "recipe-rescue/shared/terraform.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}
