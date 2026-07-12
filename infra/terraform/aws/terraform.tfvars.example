@@ -15,6 +15,10 @@ use_private_nodes  = true
 
 kubernetes_version = "1.36"
 
+# Optional local cluster admins. Set this in your real terraform.tfvars or through
+# TF_VAR_eks_admin_principal_arns in GitHub Actions.
+eks_admin_principal_arns = []
+
 node_instance_types = ["t3.small"]
 node_capacity_type  = "ON_DEMAND"
 node_min_size       = 2
