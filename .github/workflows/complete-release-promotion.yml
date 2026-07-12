@@ -162,23 +162,26 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100" \
             --jq '.check_runs | map({name, status, conclusion})')"
 
+          echo "Detected check runs:"
+          echo "${checks_json}" | jq -r '.[] | "- \(.name): \(.status) / \(.conclusion)"'
+
           required_checks=(
-            "Release Checks / Kubernetes render"
-            "Release Checks / Kubernetes schema validation"
-            "Release Checks / Kubernetes lint"
-            "Release Checks / Kubernetes project policy"
-            "Release Checks / ArgoCD manifest policy"
+            "Kubernetes render"
+            "Kubernetes schema validation"
+            "Kubernetes lint"
+            "Kubernetes project policy"
+            "ArgoCD manifest policy"
           )
 
           all_ready=true
 
-          for prefix in "${required_checks[@]}"; do
-            encoded_check="$(echo "${checks_json}" | jq -r --arg prefix "${prefix}" '
-              [.[] | select(.name | startswith($prefix))] | last // empty | @base64
+          for check_token in "${required_checks[@]}"; do
+            encoded_check="$(echo "${checks_json}" | jq -r --arg check_token "${check_token}" '
+              [.[] | select(.name | contains($check_token))] | last // empty | @base64
             ')"
 
             if [ -z "${encoded_check}" ]; then
-              echo "Missing release check: ${prefix}"
+              echo "Missing release check containing: ${check_token}"
               all_ready=false
               continue
             fi
