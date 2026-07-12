@@ -5,6 +5,7 @@ param(
     [string]$ClusterName = "recipe-rescue-shared-eks",
     [string[]]$ApplicationNamespaces = @(
         "recipe-rescue-staging",
+        "recipe-rescue-production",
         "recipe-rescue-blue",
         "recipe-rescue-green",
         "recipe-rescue-production-data"
@@ -13,6 +14,7 @@ param(
         "recipe-rescue-root",
         "recipe-rescue-staging",
         "recipe-rescue-production-data",
+        "recipe-rescue-production",
         "recipe-rescue-production-blue",
         "recipe-rescue-production-green"
     ),

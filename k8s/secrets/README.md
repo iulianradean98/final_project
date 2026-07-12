@@ -17,8 +17,7 @@ Expected Kubernetes Secrets:
 - `recipe-rescue-staging/recipe-rescue-postgres-secret`
 - `recipe-rescue-staging/recipe-rescue-api-secret`
 - `recipe-rescue-production-data/recipe-rescue-postgres-secret`
-- `recipe-rescue-blue/recipe-rescue-api-secret`
-- `recipe-rescue-green/recipe-rescue-api-secret`
+- `recipe-rescue-production/recipe-rescue-api-secret`
 - `argocd/recipe-rescue-repo`
 
 How the flow works:

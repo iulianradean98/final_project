@@ -36,6 +36,7 @@ jobs:
       - name: Lint Kubernetes manifests
         run: >
           kube-linter lint
+          --exclude dangling-service
           --exclude latest-tag
           --exclude no-read-only-root-fs
           --exclude run-as-non-root

@@ -20,3 +20,7 @@ node_capacity_type  = "ON_DEMAND"
 node_min_size       = 2
 node_desired_size   = 4
 node_max_size       = 4
+
+argocd_chart_version            = "10.1.3"
+argo_rollouts_chart_version     = "2.41.0"
+external_secrets_chart_version  = "2.7.0"

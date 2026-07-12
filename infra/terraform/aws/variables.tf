@@ -104,6 +104,12 @@ variable "argocd_chart_version" {
   default     = "10.1.3"
 }
 
+variable "argo_rollouts_chart_version" {
+  description = "Version of the argo-rollouts Helm chart to install."
+  type        = string
+  default     = "2.41.0"
+}
+
 variable "external_secrets_chart_version" {
   description = "Version of the external-secrets Helm chart to install."
   type        = string
