@@ -1,0 +1,69 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - api-external-secret.yaml
+  - backend-preview-service.yaml
+  - frontend-preview-service.yaml
+  - nginx-router-config.yaml
+  - nginx-router-deployment.yaml
+  - nginx-router-service.yaml
+  - backend-rollout.yaml
+  - frontend-rollout.yaml
+  - analysis-templates.yaml
+namespace: recipe-rescue-production
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: recipe-rescue
+      app.kubernetes.io/environment: production
+patches:
+  - target:
+      kind: Namespace
+      name: recipe-rescue
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: recipe-rescue-production
+  - target:
+      kind: ConfigMap
+      name: recipe-rescue-config
+    patch: |-
+      - op: replace
+        path: /data/ALLOWED_ORIGINS
+        value: '["https://recipe-rescue.local"]'
+  - target:
+      kind: Service
+      name: recipe-rescue-web
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: ClusterIP
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: recipe-rescue-postgres
+        namespace: recipe-rescue
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: recipe-rescue-postgres
+        namespace: recipe-rescue
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: recipe-rescue-api
+        namespace: recipe-rescue
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: recipe-rescue-web
+        namespace: recipe-rescue
+      $patch: delete

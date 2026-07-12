@@ -1,0 +1,134 @@
+name: Staging Live Tests
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy Staging
+    types:
+      - completed
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: staging-live-tests
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+  CLUSTER_NAME: recipe-rescue-shared-eks
+  STAGING_NAMESPACE: recipe-rescue-staging
+
+jobs:
+  staging-live-tests:
+    name: Smoke and integration tests
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
+
+      - name: Wait for staging workloads
+        run: |
+          set -euo pipefail
+
+          kubectl -n "${STAGING_NAMESPACE}" rollout status statefulset/recipe-rescue-postgres --timeout=10m
+          kubectl -n "${STAGING_NAMESPACE}" rollout status deployment/recipe-rescue-api --timeout=10m
+          kubectl -n "${STAGING_NAMESPACE}" rollout status deployment/recipe-rescue-web --timeout=10m
+
+      - name: Resolve staging URL
+        id: staging-url
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 40); do
+            hostname="$(kubectl -n "${STAGING_NAMESPACE}" get service recipe-rescue-web -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
+            ip="$(kubectl -n "${STAGING_NAMESPACE}" get service recipe-rescue-web -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+
+            if [ -n "${hostname}" ]; then
+              base_url="http://${hostname}"
+              echo "base_url=${base_url}" >> "${GITHUB_OUTPUT}"
+              echo "Resolved staging URL: ${base_url}"
+              exit 0
+            fi
+
+            if [ -n "${ip}" ]; then
+              base_url="http://${ip}"
+              echo "base_url=${base_url}" >> "${GITHUB_OUTPUT}"
+              echo "Resolved staging URL: ${base_url}"
+              exit 0
+            fi
+
+            echo "Waiting for staging LoadBalancer address... (${attempt}/40)"
+            sleep 15
+          done
+
+          echo "Staging LoadBalancer did not publish an address in time."
+          kubectl -n "${STAGING_NAMESPACE}" get service recipe-rescue-web -o wide
+          exit 1
+
+      - name: Run live smoke and integration tests
+        env:
+          BASE_URL: ${{ steps.staging-url.outputs.base_url }}
+        run: |
+          set -euo pipefail
+
+          echo "Testing frontend at ${BASE_URL}"
+          curl --retry 12 --retry-delay 10 --retry-all-errors -fsS "${BASE_URL}/" >/tmp/staging-home.html
+          grep -qi "recipe" /tmp/staging-home.html
+
+          echo "Testing backend health through frontend Nginx proxy"
+          curl --retry 12 --retry-delay 10 --retry-all-errors -fsS "${BASE_URL}/api/health" | jq -e '.status == "healthy"'
+          curl --retry 12 --retry-delay 10 --retry-all-errors -fsS "${BASE_URL}/api/ready" | jq -e '.status == "ready" and .database == "ok"'
+
+          email="staging-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@reciperescue.local"
+          password="StagingSmoke123!"
+
+          echo "Creating smoke-test user ${email}"
+          signup_response="$(
+            jq -n \
+              --arg email "${email}" \
+              --arg full_name "Staging Smoke Test" \
+              --arg password "${password}" \
+              '{email: $email, full_name: $full_name, password: $password}' |
+            curl -fsS \
+              -H "Content-Type: application/json" \
+              -d @- \
+              "${BASE_URL}/api/auth/signup"
+          )"
+
+          token="$(echo "${signup_response}" | jq -r '.access_token')"
+          test -n "${token}"
+          test "${token}" != "null"
+
+          curl -fsS \
+            -H "Authorization: Bearer ${token}" \
+            "${BASE_URL}/api/auth/me" |
+            jq -e --arg email "${email}" '.email == $email'
+
+          curl -fsS "${BASE_URL}/api/recipes" | jq -e 'length >= 10'
+
+      - name: Write staging test summary
+        if: always()
+        run: |
+          {
+            echo "### Staging live tests"
+            echo ""
+            echo "- Namespace: \`${STAGING_NAMESPACE}\`"
+            echo "- Cluster: \`${CLUSTER_NAME}\`"
+            echo "- Result: \`${{ job.status }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

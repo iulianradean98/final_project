@@ -63,6 +63,12 @@ variable "kubernetes_version" {
   default     = "1.36"
 }
 
+variable "eks_admin_principal_arns" {
+  description = "IAM principal ARNs that should receive cluster-admin access to the EKS cluster, such as the local developer IAM user."
+  type        = list(string)
+  default     = []
+}
+
 variable "node_instance_types" {
   description = "EC2 instance types allowed for the EKS managed node group."
   type        = list(string)
@@ -102,6 +108,12 @@ variable "argocd_chart_version" {
   description = "Version of the argo-cd Helm chart to install."
   type        = string
   default     = "10.1.3"
+}
+
+variable "argo_rollouts_chart_version" {
+  description = "Version of the argo-rollouts Helm chart to install."
+  type        = string
+  default     = "2.41.0"
 }
 
 variable "external_secrets_chart_version" {

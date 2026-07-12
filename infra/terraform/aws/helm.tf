@@ -48,6 +48,28 @@ resource "helm_release" "argocd" {
   ]
 }
 
+resource "helm_release" "argo_rollouts" {
+  name             = "argo-rollouts"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-rollouts"
+  version          = var.argo_rollouts_chart_version
+  namespace        = "argo-rollouts"
+  create_namespace = true
+
+  wait    = true
+  timeout = 600
+
+  values = [
+    yamlencode({
+      installCRDs = true
+      keepCRDs    = false
+      dashboard = {
+        enabled = true
+      }
+    }),
+  ]
+}
+
 resource "helm_release" "recipe_rescue_platform" {
   name      = "recipe-rescue-platform"
   chart     = "${path.module}/charts/recipe-rescue-platform"
@@ -67,6 +89,7 @@ resource "helm_release" "recipe_rescue_platform" {
 
   depends_on = [
     helm_release.argocd,
+    helm_release.argo_rollouts,
     helm_release.external_secrets,
   ]
 }

@@ -133,6 +133,22 @@ Verify cluster access:
 kubectl get nodes
 ```
 
+If the cluster was created by GitHub Actions, local `kubectl` access requires your IAM user or role to be configured as an EKS access entry. Set `eks_admin_principal_arns` in your local `terraform.tfvars` when applying locally:
+
+```hcl
+eks_admin_principal_arns = [
+  "arn:aws:iam::<account-id>:user/<your-user-name>"
+]
+```
+
+For GitHub Actions infrastructure recovery, create a repository variable named `EKS_ADMIN_PRINCIPAL_ARNS` with a JSON list value:
+
+```json
+["arn:aws:iam::<account-id>:user/<your-user-name>"]
+```
+
+When Terraform applies, it associates those principals with the AWS-managed `AmazonEKSClusterAdminPolicy`, giving them cluster-admin access.
+
 ## Cleanup
 
 Terraform cleanup is the official recovery/deletion path for everything created by this directory.

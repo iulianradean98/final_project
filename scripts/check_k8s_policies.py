@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 
-WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
+WORKLOAD_KINDS = {"Deployment", "Rollout", "StatefulSet"}
 
 
 def expand_manifest_paths(raw_paths: list[str]) -> list[Path]:

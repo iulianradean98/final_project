@@ -26,6 +26,7 @@ concurrency:
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
+  TF_VAR_eks_admin_principal_arns: ${{ vars.EKS_ADMIN_PRINCIPAL_ARNS || '[]' }}
   TERRAFORM_DIRECTORY: infra/terraform/aws
 
 jobs:

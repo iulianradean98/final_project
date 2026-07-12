@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: recipe-rescue-production-blue
+  name: recipe-rescue-production
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -10,10 +10,10 @@ spec:
   source:
     repoURL: https://github.com/iulianradean98/final_project.git
     targetRevision: release
-    path: k8s/overlays/production-blue
+    path: k8s/overlays/production
   destination:
     server: https://kubernetes.default.svc
-    namespace: recipe-rescue-blue
+    namespace: recipe-rescue-production
   syncPolicy:
     automated:
       prune: true

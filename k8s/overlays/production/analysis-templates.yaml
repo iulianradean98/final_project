@@ -1,0 +1,149 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: recipe-rescue-api-preview-smoke
+spec:
+  metrics:
+    - name: api-preview-smoke
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 120
+            ttlSecondsAfterFinished: 300
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.11.1
+                    command:
+                      - /bin/sh
+                      - -c
+                    args:
+                      - |
+                        set -eu
+                        curl -fsS http://recipe-rescue-api-preview:8000/api/health
+                        curl -fsS http://recipe-rescue-api-preview:8000/api/ready
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 32Mi
+                      limits:
+                        cpu: 100m
+                        memory: 64Mi
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: recipe-rescue-api-active-health
+spec:
+  metrics:
+    - name: api-active-health
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 720
+            ttlSecondsAfterFinished: 300
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.11.1
+                    command:
+                      - /bin/sh
+                      - -c
+                    args:
+                      - |
+                        set -eu
+                        for i in $(seq 1 10); do
+                          curl -fsS http://recipe-rescue-api:8000/api/health
+                          curl -fsS http://recipe-rescue-api:8000/api/ready
+                          if [ "$i" -lt 10 ]; then
+                            sleep 60
+                          fi
+                        done
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 32Mi
+                      limits:
+                        cpu: 100m
+                        memory: 64Mi
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: recipe-rescue-web-preview-smoke
+spec:
+  metrics:
+    - name: web-preview-smoke
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 120
+            ttlSecondsAfterFinished: 300
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.11.1
+                    command:
+                      - /bin/sh
+                      - -c
+                    args:
+                      - |
+                        set -eu
+                        curl -fsS http://recipe-rescue-web-preview/
+                        curl -fsS http://recipe-rescue-web-preview/api/health
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 32Mi
+                      limits:
+                        cpu: 100m
+                        memory: 64Mi
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: recipe-rescue-web-active-health
+spec:
+  metrics:
+    - name: web-active-health
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 720
+            ttlSecondsAfterFinished: 300
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.11.1
+                    command:
+                      - /bin/sh
+                      - -c
+                    args:
+                      - |
+                        set -eu
+                        for i in $(seq 1 10); do
+                          curl -fsS http://recipe-rescue-web/
+                          curl -fsS http://recipe-rescue-web/api/health
+                          if [ "$i" -lt 10 ]; then
+                            sleep 60
+                          fi
+                        done
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 32Mi
+                      limits:
+                        cpu: 100m
+                        memory: 64Mi
