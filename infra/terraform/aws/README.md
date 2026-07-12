@@ -194,7 +194,7 @@ After the demo, change it back to `approval` or `plan-only`, then destroy the in
 
 The recovery workflow needs shared Terraform state. Local laptop state is not enough because GitHub Actions must know what AWS resources already exist.
 
-Create one S3 bucket and one DynamoDB table for Terraform state and locking:
+Create one S3 bucket for Terraform state and locking:
 
 ```powershell
 aws s3api create-bucket `
@@ -205,21 +205,15 @@ aws s3api create-bucket `
 aws s3api put-bucket-versioning `
   --bucket recipe-rescue-terraform-state-<unique-suffix> `
   --versioning-configuration Status=Enabled
-
-aws dynamodb create-table `
-  --table-name recipe-rescue-terraform-locks `
-  --attribute-definitions AttributeName=LockID,AttributeType=S `
-  --key-schema AttributeName=LockID,KeyType=HASH `
-  --billing-mode PAY_PER_REQUEST `
-  --region eu-central-1
 ```
+
+Terraform uses this bucket for both the state file and the native S3 lockfile. Older Terraform setups used DynamoDB for locking; this project uses `use_lockfile = true`, which avoids the DynamoDB deprecation warning in current Terraform versions.
 
 Then add these GitHub repository variables:
 
 ```text
 AWS_REGION=eu-central-1
 TF_STATE_BUCKET=recipe-rescue-terraform-state-<unique-suffix>
-TF_STATE_LOCK_TABLE=recipe-rescue-terraform-locks
 INFRA_RECOVERY_MODE=approval
 ```
 
@@ -240,6 +234,15 @@ aws-infrastructure-recovery
 Add yourself as a required reviewer. This is what makes `approval` mode safe: the workflow can detect drift automatically, but it cannot recreate infrastructure until you approve the environment deployment.
 
 This is still not a full enterprise security platform. Later hardening can add AWS WAF, private-only nodes, network policies, CloudWatch alarms, Prometheus/Grafana alerts, backup/restore testing, and automated rollback workflows.
+
+For local Terraform usage, copy the committed backend example:
+
+```powershell
+copy backend.tf.example backend.tf
+terraform init -reconfigure
+```
+
+`backend.tf` is ignored by Git because it may contain account-specific backend settings. `backend.tf.example` is committed so another user can copy the same backend shape and point to the same S3 bucket if they have AWS permissions.
 
 ## What Comes Next
 
