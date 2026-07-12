@@ -79,32 +79,9 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
 
-      - name: Configure Terraform remote state
+      - name: Initialize Terraform remote state
         working-directory: ${{ env.TERRAFORM_DIRECTORY }}
-        env:
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-          AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${TF_STATE_BUCKET}" ]; then
-            echo "TF_STATE_BUCKET repository variable is required for automated recovery."
-            echo "Remote state is required so GitHub Actions and local Terraform use the same infrastructure state."
-            exit 1
-          fi
-
-          cat > backend.tf <<EOF
-          terraform {
-            backend "s3" {}
-          }
-          EOF
-
-          terraform init \
-            -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="key=recipe-rescue/shared/terraform.tfstate" \
-            -backend-config="region=${AWS_REGION}" \
-            -backend-config="encrypt=true" \
-            -backend-config="use_lockfile=true"
+        run: terraform init
 
       - name: Validate Terraform
         working-directory: ${{ env.TERRAFORM_DIRECTORY }}
@@ -176,25 +153,9 @@ jobs:
           name: infrastructure-recovery-plan
           path: ${{ env.TERRAFORM_DIRECTORY }}
 
-      - name: Configure Terraform remote state
+      - name: Initialize Terraform remote state
         working-directory: ${{ env.TERRAFORM_DIRECTORY }}
-        env:
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-          AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
-        run: |
-          set -euo pipefail
-          cat > backend.tf <<EOF
-          terraform {
-            backend "s3" {}
-          }
-          EOF
-
-          terraform init \
-            -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="key=recipe-rescue/shared/terraform.tfstate" \
-            -backend-config="region=${AWS_REGION}" \
-            -backend-config="encrypt=true" \
-            -backend-config="use_lockfile=true"
+        run: terraform init
 
       - name: Apply approved recovery plan
         working-directory: ${{ env.TERRAFORM_DIRECTORY }}
@@ -227,25 +188,9 @@ jobs:
           name: infrastructure-recovery-plan
           path: ${{ env.TERRAFORM_DIRECTORY }}
 
-      - name: Configure Terraform remote state
+      - name: Initialize Terraform remote state
         working-directory: ${{ env.TERRAFORM_DIRECTORY }}
-        env:
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-          AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
-        run: |
-          set -euo pipefail
-          cat > backend.tf <<EOF
-          terraform {
-            backend "s3" {}
-          }
-          EOF
-
-          terraform init \
-            -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="key=recipe-rescue/shared/terraform.tfstate" \
-            -backend-config="region=${AWS_REGION}" \
-            -backend-config="encrypt=true" \
-            -backend-config="use_lockfile=true"
+        run: terraform init
 
       - name: Apply automatic recovery plan
         working-directory: ${{ env.TERRAFORM_DIRECTORY }}

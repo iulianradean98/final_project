@@ -23,6 +23,7 @@ Terraform lets us describe infrastructure in files instead of creating it manual
 
 ## File Roles
 
+- `backend.tf`: configures the shared S3 Terraform backend used by local Terraform and GitHub Actions.
 - `versions.tf`: declares the Terraform and AWS provider versions.
 - `providers.tf`: configures the AWS provider and default resource tags.
 - `variables.tf`: defines configurable inputs such as region, VPC CIDR, Kubernetes version, and node sizes.
@@ -213,7 +214,6 @@ Then add these GitHub repository variables:
 
 ```text
 AWS_REGION=eu-central-1
-TF_STATE_BUCKET=recipe-rescue-terraform-state-<unique-suffix>
 INFRA_RECOVERY_MODE=approval
 ```
 
@@ -223,7 +223,7 @@ Add this GitHub repository secret:
 AWS_ROLE_TO_ASSUME=<arn-of-github-actions-aws-iam-role>
 ```
 
-The AWS role should trust GitHub Actions OIDC for this repository and have enough permissions to run this Terraform project. For a student demo, an administrator-style role is simplest to operate, but a real production setup should narrow permissions to EKS, EC2/VPC, IAM roles used by EKS, KMS, CloudWatch Logs, Secrets Manager read access for the configured prefix, and DynamoDB/S3 state access.
+The AWS role should trust GitHub Actions OIDC for this repository and have enough permissions to run this Terraform project. For a student demo, an administrator-style role is simplest to operate, but a real production setup should narrow permissions to EKS, EC2/VPC, IAM roles used by EKS, KMS, CloudWatch Logs, Secrets Manager read access for the configured prefix, and S3 state access.
 
 Finally, create a GitHub environment named:
 
@@ -235,14 +235,13 @@ Add yourself as a required reviewer. This is what makes `approval` mode safe: th
 
 This is still not a full enterprise security platform. Later hardening can add AWS WAF, private-only nodes, network policies, CloudWatch alarms, Prometheus/Grafana alerts, backup/restore testing, and automated rollback workflows.
 
-For local Terraform usage, copy the committed backend example:
+The shared Terraform backend is committed in `backend.tf` because this capstone has one official AWS backend. It does not contain passwords or tokens. Anyone who clones the repository and has AWS permissions can run:
 
 ```powershell
-copy backend.tf.example backend.tf
-terraform init -reconfigure
+terraform init
 ```
 
-`backend.tf` is ignored by Git because it may contain account-specific backend settings. `backend.tf.example` is committed so another user can copy the same backend shape and point to the same S3 bucket if they have AWS permissions.
+and use the same S3 state file.
 
 ## What Comes Next
 
