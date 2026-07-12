@@ -63,6 +63,12 @@ variable "kubernetes_version" {
   default     = "1.36"
 }
 
+variable "eks_admin_principal_arns" {
+  description = "IAM principal ARNs that should receive cluster-admin access to the EKS cluster, such as the local developer IAM user."
+  type        = list(string)
+  default     = []
+}
+
 variable "node_instance_types" {
   description = "EC2 instance types allowed for the EKS managed node group."
   type        = list(string)

@@ -35,6 +35,21 @@ module "eks" {
   endpoint_public_access                   = true
   enable_cluster_creator_admin_permissions = true
 
+  access_entries = {
+    for index, principal_arn in var.eks_admin_principal_arns : "admin-${index}" => {
+      principal_arn = principal_arn
+
+      policy_associations = {
+        cluster_admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
+
   addons = {
     coredns = {}
     eks-pod-identity-agent = {
