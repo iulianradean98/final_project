@@ -174,7 +174,7 @@ This project uses several layers of recovery:
 The `Infrastructure Recovery` GitHub Actions workflow adds a controlled recovery layer for the AWS platform. It runs Terraform plan against remote state and supports three modes:
 
 - `plan-only`: detects drift but never recreates infrastructure.
-- `approval`: detects drift, then waits for approval through the `aws-infrastructure-recovery` GitHub environment before running Terraform apply.
+- `approval`: scheduled runs detect drift but do not recreate infrastructure; a user with repository access manually runs the workflow to approve and apply recovery.
 - `auto`: detects drift and runs Terraform apply automatically. Use this only for a short trainer demo because it can recreate paid AWS resources after you intentionally destroy them.
 
 For normal cost control, keep the repository variable below set to:
@@ -225,13 +225,9 @@ AWS_ROLE_TO_ASSUME=<arn-of-github-actions-aws-iam-role>
 
 The AWS role should trust GitHub Actions OIDC for this repository and have enough permissions to run this Terraform project. For a student demo, an administrator-style role is simplest to operate, but a real production setup should narrow permissions to EKS, EC2/VPC, IAM roles used by EKS, KMS, CloudWatch Logs, Secrets Manager read access for the configured prefix, and S3 state access.
 
-Finally, create a GitHub environment named:
+Some GitHub plans expose environment protection rules such as required reviewers. If your repository shows those options, you can create an environment named `aws-infrastructure-recovery` and add yourself as a required reviewer for an extra approval gate.
 
-```text
-aws-infrastructure-recovery
-```
-
-Add yourself as a required reviewer. This is what makes `approval` mode safe: the workflow can detect drift automatically, but it cannot recreate infrastructure until you approve the environment deployment.
+If your environment page only shows environment secrets and variables, your plan/repository visibility does not expose that approval feature. In that case this project still stays safe: `approval` mode only applies Terraform during a manual `workflow_dispatch` run. Scheduled `approval` runs detect drift and report it, but they do not recreate infrastructure.
 
 This is still not a full enterprise security platform. Later hardening can add AWS WAF, private-only nodes, network policies, CloudWatch alarms, Prometheus/Grafana alerts, backup/restore testing, and automated rollback workflows.
 
