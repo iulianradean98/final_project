@@ -60,7 +60,7 @@ variable "use_private_nodes" {
 variable "kubernetes_version" {
   description = "EKS Kubernetes control plane version."
   type        = string
-  default     = "1.33"
+  default     = "1.36"
 }
 
 variable "node_instance_types" {

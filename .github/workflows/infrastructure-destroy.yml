@@ -68,14 +68,14 @@ jobs:
           AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
           SKIP_KUBERNETES_CLEANUP: ${{ github.event.inputs.skip_kubernetes_cleanup }}
         run: |
-          $arguments = @(
-            "-WorkingDirectory", (Get-Location).Path,
-            "-AwsRegion", $env:AWS_REGION,
-            "-AutoApprove"
-          )
+          $arguments = @{
+            WorkingDirectory = (Get-Location).Path
+            AwsRegion = $env:AWS_REGION
+            AutoApprove = $true
+          }
 
           if ($env:SKIP_KUBERNETES_CLEANUP -eq "true") {
-            $arguments += "-SkipKubernetesCleanup"
+            $arguments.SkipKubernetesCleanup = $true
           }
 
           ./scripts/destroy-infra.ps1 @arguments
