@@ -92,7 +92,7 @@ jobs:
           grep -qi "recipe" /tmp/staging-home.html
 
           echo "Testing backend health through frontend Nginx proxy"
-          curl --retry 12 --retry-delay 10 --retry-all-errors -fsS "${BASE_URL}/api/health" | jq -e '.status == "healthy"'
+          curl --retry 12 --retry-delay 10 --retry-all-errors -fsS "${BASE_URL}/api/health" | jq -e '.status == "ok"'
           curl --retry 12 --retry-delay 10 --retry-all-errors -fsS "${BASE_URL}/api/ready" | jq -e '.status == "ready" and .database == "ok"'
 
           email="staging-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@reciperescue.local"
