@@ -59,7 +59,7 @@ Kubernetes manifests live in `k8s/base` and `k8s/overlays` and define the first 
 - PostgreSQL persistent volume claim template
 - application ConfigMap
 - liveness and readiness probes
-- staging, production-data, production-blue, and production-green overlays
+- staging, production-data, and production overlays
 
 The Kubernetes manifests are rendered in CI with:
 
@@ -67,8 +67,7 @@ The Kubernetes manifests are rendered in CI with:
 kubectl kustomize k8s/base
 kubectl kustomize k8s/overlays/staging
 kubectl kustomize k8s/overlays/production-data
-kubectl kustomize k8s/overlays/production-blue
-kubectl kustomize k8s/overlays/production-green
+kubectl kustomize k8s/overlays/production
 kubeconform -strict -summary -ignore-missing-schemas rendered-manifests/*.yaml
 kube-linter lint rendered-manifests/*.yaml
 python scripts/check_k8s_policies.py rendered-manifests/*.yaml
@@ -79,10 +78,9 @@ The CI policy checks verify practical cluster-free rules: rendered manifests mus
 The production blue-green structure separates application traffic from production data:
 
 - `recipe-rescue-production-data`: the single shared production PostgreSQL database.
-- `recipe-rescue-blue`: the blue production frontend/backend application color.
-- `recipe-rescue-green`: the green production frontend/backend application color.
+- `recipe-rescue-production`: the production frontend/backend namespace managed by Argo Rollouts.
 
-This keeps both production application colors isolated while avoiding two separate production databases. Blue and green are expected to connect to the same production database service in `recipe-rescue-production-data`.
+Argo Rollouts manages the blue and green application states as ReplicaSets behind active and preview Services. The stable production Service sends traffic to the active ReplicaSet, preview Services expose the new ReplicaSet for smoke tests, and both colors use the same production database service in `recipe-rescue-production-data`.
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
@@ -97,10 +95,9 @@ The ArgoCD structure follows an app-of-apps pattern:
 - `recipe-rescue-root` watches `argocd/applications`.
 - `recipe-rescue-staging` syncs `k8s/overlays/staging` from `staging`.
 - `recipe-rescue-production-data` syncs `k8s/overlays/production-data` from `release`.
-- `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release`.
-- `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release`.
+- `recipe-rescue-production` syncs `k8s/overlays/production` from `release`.
 
-The `staging` branch stores the automatically deployed staging state after Docker images are published from `main`. The single `release` branch stores the manually approved production deployment state. The `Promote Release` workflow opens a PR from `main` into `release` for validation and human approval. After the PR is approved and release checks pass, the `Complete Release Promotion` workflow automatically moves `release` to the exact same commit SHA as `main`, comments on the PR, closes it when GitHub allows that cleanup, and lets ArgoCD reconcile the production applications from `release`.
+The `staging` branch stores the automatically deployed staging state after Docker images are published from `main`. The single `release` branch stores the approved production deployment state. The `Promote Release` workflow opens a PR from `main` into `release` for validation and human approval. After the PR is approved and release checks pass, the `Complete Release Promotion` workflow moves `release` to the approved application commit, pins `k8s/overlays/production` to the matching `sha-<commit>` Docker image tag, comments on the PR, closes it when GitHub allows that cleanup, and lets ArgoCD reconcile production from `release`.
 
 ArgoCD manifests are checked in CI with:
 
@@ -115,6 +112,7 @@ Terraform infrastructure code lives in `infra/terraform/aws`. The first AWS laye
 Terraform also installs the cluster platform services used by the deployment flow:
 
 - ArgoCD through Helm
+- Argo Rollouts through Helm for automated blue-green production deployments
 - External Secrets Operator through Helm
 - EKS Pod Identity permissions for reading AWS Secrets Manager
 
@@ -159,18 +157,21 @@ Pushes to `main` start the deployment side of the lifecycle:
 
 The `staging` branch is an automated deployment-state branch. It should not require manual PR approval, because it is updated by the `Deploy Staging` workflow after `main` has passed PR checks and Docker image publishing. If branch protection is enabled for `staging`, allow GitHub Actions to push to it.
 
-Production promotion is manual:
+Production promotion is approval-gated and deployment is automated:
 
 1. Run the `Promote Release` workflow.
 2. The workflow opens a normal PR from `main` into `release`.
 3. Wait for release branch checks and human approval.
 4. The `Complete Release Promotion` workflow starts automatically after the missing condition arrives: either approval after checks, or checks after approval.
-5. The workflow verifies the PR, approvals, and checks, then updates `release` to the exact same commit SHA as `main`.
-6. The workflow comments on and closes the PR when GitHub allows it, then ArgoCD syncs production from `release`.
+5. The workflow verifies the PR, approvals, and checks, then updates `release` to the approved `main` application SHA.
+6. The workflow pins production images on `release` to the matching `sha-<12-character-commit-sha>` Docker tag.
+7. The workflow comments on and closes the PR when GitHub allows it.
+8. ArgoCD syncs production from `release`.
+9. Argo Rollouts creates the preview ReplicaSet, runs smoke tests, switches active Services, keeps the old ReplicaSet for 10 minutes, and rolls back automatically if post-promotion health checks fail.
 
 The `Complete Release Promotion` workflow can also be run manually with the release PR number if an automatic trigger needs to be retried.
 
-Protect the `release` branch with required PR review, required release checks, and restricted direct pushes. The `Complete Release Promotion` workflow must be allowed to bypass the release branch update restriction, or it must use a fine-grained token stored as `RELEASE_PROMOTION_TOKEN`. This is required because the workflow intentionally moves the release branch pointer to the approved `main` commit.
+Protect the `release` branch with required PR review, required release checks, and restricted direct pushes. The `Complete Release Promotion` workflow must be allowed to bypass the release branch update restriction, or it must use a fine-grained token stored as `RELEASE_PROMOTION_TOKEN`. This is required because the workflow intentionally moves the release branch pointer to the approved `main` commit and then writes the production deployment-state commit.
 
 Create the `release` branch once from `main` after the CI/CD workflow files are merged, then protect it. GitHub uses workflow files from the target branch for PR checks, so the release branch must contain `release-checks.yml` before promotion PRs can be validated.
 

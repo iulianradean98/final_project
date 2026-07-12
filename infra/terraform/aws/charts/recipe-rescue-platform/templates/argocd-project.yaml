@@ -14,9 +14,7 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: recipe-rescue-production-data
       server: https://kubernetes.default.svc
-    - namespace: recipe-rescue-blue
-      server: https://kubernetes.default.svc
-    - namespace: recipe-rescue-green
+    - namespace: recipe-rescue-production
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""

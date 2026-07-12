@@ -1,0 +1,67 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: recipe-rescue-api
+  labels:
+    app.kubernetes.io/name: recipe-rescue-api
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: recipe-rescue-api
+      app.kubernetes.io/component: backend
+  strategy:
+    blueGreen:
+      activeService: recipe-rescue-api
+      previewService: recipe-rescue-api-preview
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 600
+      prePromotionAnalysis:
+        templates:
+          - templateName: recipe-rescue-api-preview-smoke
+      postPromotionAnalysis:
+        templates:
+          - templateName: recipe-rescue-api-active-health
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: recipe-rescue-api
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: api
+          image: iulian98/recipe-rescue-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: recipe-rescue-config
+            - secretRef:
+                name: recipe-rescue-api-secret
+          readinessProbe:
+            httpGet:
+              path: /api/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

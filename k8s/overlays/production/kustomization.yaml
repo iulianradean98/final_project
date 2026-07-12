@@ -3,13 +3,17 @@ kind: Kustomization
 resources:
   - ../../base
   - api-external-secret.yaml
-namespace: recipe-rescue-green
+  - backend-preview-service.yaml
+  - frontend-preview-service.yaml
+  - backend-rollout.yaml
+  - frontend-rollout.yaml
+  - analysis-templates.yaml
+namespace: recipe-rescue-production
 labels:
-  - includeSelectors: true
+  - includeSelectors: false
     pairs:
       app.kubernetes.io/part-of: recipe-rescue
       app.kubernetes.io/environment: production
-      app.kubernetes.io/deployment-color: green
 patches:
   - target:
       kind: Namespace
@@ -17,14 +21,14 @@ patches:
     patch: |-
       - op: replace
         path: /metadata/name
-        value: recipe-rescue-green
+        value: recipe-rescue-production
   - target:
       kind: ConfigMap
       name: recipe-rescue-config
     patch: |-
       - op: replace
         path: /data/ALLOWED_ORIGINS
-        value: '["https://green.recipe-rescue.local"]'
+        value: '["https://recipe-rescue.local"]'
   - patch: |-
       apiVersion: v1
       kind: Service
@@ -37,5 +41,19 @@ patches:
       kind: StatefulSet
       metadata:
         name: recipe-rescue-postgres
+        namespace: recipe-rescue
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: recipe-rescue-api
+        namespace: recipe-rescue
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: recipe-rescue-web
         namespace: recipe-rescue
       $patch: delete

@@ -12,8 +12,7 @@ VALID_APPLICATION_TARGETS = {
     "argocd/applications": "main",
     "k8s/overlays/staging": "staging",
     "k8s/overlays/production-data": "release",
-    "k8s/overlays/production-blue": "release",
-    "k8s/overlays/production-green": "release",
+    "k8s/overlays/production": "release",
 }
 
 
@@ -94,8 +93,7 @@ def validate_project(path: Path, resource: dict[str, Any]) -> list[str]:
         "argocd",
         "recipe-rescue-staging",
         "recipe-rescue-production-data",
-        "recipe-rescue-blue",
-        "recipe-rescue-green",
+        "recipe-rescue-production",
     }
     missing_namespaces = sorted(required_namespaces - allowed_namespaces)
     if missing_namespaces:
