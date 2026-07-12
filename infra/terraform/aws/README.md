@@ -170,7 +170,76 @@ This project uses several layers of recovery:
 - ArgoCD automated sync with self-heal restores Kubernetes resources back to the Git-defined state if somebody changes them manually in the cluster.
 - GitHub branch protections and PR checks protect the source of truth before it reaches ArgoCD.
 
-This is not a full enterprise security platform yet. Later hardening can add AWS WAF, private-only nodes, network policies, external secrets, CloudWatch alarms, Prometheus/Grafana alerts, and automated rollback workflows.
+The `Infrastructure Recovery` GitHub Actions workflow adds a controlled recovery layer for the AWS platform. It runs Terraform plan against remote state and supports three modes:
+
+- `plan-only`: detects drift but never recreates infrastructure.
+- `approval`: detects drift, then waits for approval through the `aws-infrastructure-recovery` GitHub environment before running Terraform apply.
+- `auto`: detects drift and runs Terraform apply automatically. Use this only for a short trainer demo because it can recreate paid AWS resources after you intentionally destroy them.
+
+For normal cost control, keep the repository variable below set to:
+
+```text
+INFRA_RECOVERY_MODE=approval
+```
+
+For a temporary self-healing demonstration, change it to:
+
+```text
+INFRA_RECOVERY_MODE=auto
+```
+
+After the demo, change it back to `approval` or `plan-only`, then destroy the infrastructure to avoid ongoing cost.
+
+### GitHub Actions Recovery Setup
+
+The recovery workflow needs shared Terraform state. Local laptop state is not enough because GitHub Actions must know what AWS resources already exist.
+
+Create one S3 bucket and one DynamoDB table for Terraform state and locking:
+
+```powershell
+aws s3api create-bucket `
+  --bucket recipe-rescue-terraform-state-<unique-suffix> `
+  --region eu-central-1 `
+  --create-bucket-configuration LocationConstraint=eu-central-1
+
+aws s3api put-bucket-versioning `
+  --bucket recipe-rescue-terraform-state-<unique-suffix> `
+  --versioning-configuration Status=Enabled
+
+aws dynamodb create-table `
+  --table-name recipe-rescue-terraform-locks `
+  --attribute-definitions AttributeName=LockID,AttributeType=S `
+  --key-schema AttributeName=LockID,KeyType=HASH `
+  --billing-mode PAY_PER_REQUEST `
+  --region eu-central-1
+```
+
+Then add these GitHub repository variables:
+
+```text
+AWS_REGION=eu-central-1
+TF_STATE_BUCKET=recipe-rescue-terraform-state-<unique-suffix>
+TF_STATE_LOCK_TABLE=recipe-rescue-terraform-locks
+INFRA_RECOVERY_MODE=approval
+```
+
+Add this GitHub repository secret:
+
+```text
+AWS_ROLE_TO_ASSUME=<arn-of-github-actions-aws-iam-role>
+```
+
+The AWS role should trust GitHub Actions OIDC for this repository and have enough permissions to run this Terraform project. For a student demo, an administrator-style role is simplest to operate, but a real production setup should narrow permissions to EKS, EC2/VPC, IAM roles used by EKS, KMS, CloudWatch Logs, Secrets Manager read access for the configured prefix, and DynamoDB/S3 state access.
+
+Finally, create a GitHub environment named:
+
+```text
+aws-infrastructure-recovery
+```
+
+Add yourself as a required reviewer. This is what makes `approval` mode safe: the workflow can detect drift automatically, but it cannot recreate infrastructure until you approve the environment deployment.
+
+This is still not a full enterprise security platform. Later hardening can add AWS WAF, private-only nodes, network policies, CloudWatch alarms, Prometheus/Grafana alerts, backup/restore testing, and automated rollback workflows.
 
 ## What Comes Next
 

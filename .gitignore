@@ -19,6 +19,7 @@ Thumbs.db
 
 # Terraform
 **/.terraform/
+infra/terraform/aws/backend.tf
 *.tfstate
 *.tfstate.*
 *.tfvars

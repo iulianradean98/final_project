@@ -1,0 +1,255 @@
+name: Infrastructure Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      recovery_mode:
+        description: How to handle detected infrastructure drift.
+        required: true
+        default: approval
+        type: choice
+        options:
+          - approval
+          - auto
+          - plan-only
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: infrastructure-recovery
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TERRAFORM_DIRECTORY: infra/terraform/aws
+
+jobs:
+  plan:
+    name: Detect infrastructure drift
+    runs-on: ubuntu-latest
+
+    outputs:
+      drift_detected: ${{ steps.plan.outputs.drift_detected }}
+      recovery_mode: ${{ steps.mode.outputs.recovery_mode }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Resolve recovery mode
+        id: mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ github.event.inputs.recovery_mode }}
+          CONFIGURED_MODE: ${{ vars.INFRA_RECOVERY_MODE }}
+        run: |
+          set -euo pipefail
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            recovery_mode="${INPUT_MODE}"
+          elif [ -n "${CONFIGURED_MODE}" ]; then
+            recovery_mode="${CONFIGURED_MODE}"
+          else
+            recovery_mode="approval"
+          fi
+
+          case "${recovery_mode}" in
+            approval|auto|plan-only) ;;
+            *)
+              echo "Invalid recovery mode: ${recovery_mode}. Use approval, auto, or plan-only."
+              exit 1
+              ;;
+          esac
+
+          echo "recovery_mode=${recovery_mode}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+
+      - name: Configure Terraform remote state
+        working-directory: ${{ env.TERRAFORM_DIRECTORY }}
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_STATE_LOCK_TABLE: ${{ vars.TF_STATE_LOCK_TABLE }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TF_STATE_BUCKET}" ] || [ -z "${TF_STATE_LOCK_TABLE}" ]; then
+            echo "TF_STATE_BUCKET and TF_STATE_LOCK_TABLE repository variables are required for automated recovery."
+            echo "Remote state is required so GitHub Actions and local Terraform use the same infrastructure state."
+            exit 1
+          fi
+
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {}
+          }
+          EOF
+
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=recipe-rescue/shared/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}" \
+            -backend-config="encrypt=true"
+
+      - name: Validate Terraform
+        working-directory: ${{ env.TERRAFORM_DIRECTORY }}
+        run: terraform validate
+
+      - name: Plan infrastructure recovery
+        id: plan
+        working-directory: ${{ env.TERRAFORM_DIRECTORY }}
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -out=recovery.tfplan
+          plan_exit_code=$?
+          set -e
+
+          if [ "${plan_exit_code}" -eq 0 ]; then
+            echo "No infrastructure drift detected."
+            echo "drift_detected=false" >> "${GITHUB_OUTPUT}"
+          elif [ "${plan_exit_code}" -eq 2 ]; then
+            echo "Infrastructure drift detected. Terraform can reconcile it."
+            echo "drift_detected=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "Terraform plan failed with exit code ${plan_exit_code}."
+            exit "${plan_exit_code}"
+          fi
+
+      - name: Upload recovery plan
+        if: steps.plan.outputs.drift_detected == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-recovery-plan
+          path: ${{ env.TERRAFORM_DIRECTORY }}/recovery.tfplan
+          retention-days: 1
+
+      - name: Write recovery summary
+        run: |
+          {
+            echo "### Infrastructure recovery"
+            echo ""
+            echo "- Mode: \`${{ steps.mode.outputs.recovery_mode }}\`"
+            echo "- Drift detected: \`${{ steps.plan.outputs.drift_detected }}\`"
+            echo "- Terraform directory: \`${{ env.TERRAFORM_DIRECTORY }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  apply-with-approval:
+    name: Recreate infrastructure after approval
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.drift_detected == 'true' && needs.plan.outputs.recovery_mode == 'approval'
+    environment: aws-infrastructure-recovery
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+
+      - name: Download recovery plan
+        uses: actions/download-artifact@v5
+        with:
+          name: infrastructure-recovery-plan
+          path: ${{ env.TERRAFORM_DIRECTORY }}
+
+      - name: Configure Terraform remote state
+        working-directory: ${{ env.TERRAFORM_DIRECTORY }}
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_STATE_LOCK_TABLE: ${{ vars.TF_STATE_LOCK_TABLE }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+        run: |
+          set -euo pipefail
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {}
+          }
+          EOF
+
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=recipe-rescue/shared/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}" \
+            -backend-config="encrypt=true"
+
+      - name: Apply approved recovery plan
+        working-directory: ${{ env.TERRAFORM_DIRECTORY }}
+        run: terraform apply -auto-approve recovery.tfplan
+
+  apply-automatically:
+    name: Automatically recreate infrastructure
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.drift_detected == 'true' && needs.plan.outputs.recovery_mode == 'auto'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+
+      - name: Download recovery plan
+        uses: actions/download-artifact@v5
+        with:
+          name: infrastructure-recovery-plan
+          path: ${{ env.TERRAFORM_DIRECTORY }}
+
+      - name: Configure Terraform remote state
+        working-directory: ${{ env.TERRAFORM_DIRECTORY }}
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_STATE_LOCK_TABLE: ${{ vars.TF_STATE_LOCK_TABLE }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+        run: |
+          set -euo pipefail
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {}
+          }
+          EOF
+
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=recipe-rescue/shared/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}" \
+            -backend-config="encrypt=true"
+
+      - name: Apply automatic recovery plan
+        working-directory: ${{ env.TERRAFORM_DIRECTORY }}
+        run: terraform apply -auto-approve recovery.tfplan
