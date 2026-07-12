@@ -55,6 +55,7 @@ Kubernetes manifests live in `k8s/base` and `k8s/overlays` and define the first 
 
 - frontend Deployment and Service
 - backend Deployment and Service
+- production Nginx edge router Deployment and LoadBalancer Service
 - PostgreSQL StatefulSet and Service
 - PostgreSQL persistent volume claim template
 - application ConfigMap
@@ -80,7 +81,7 @@ The production blue-green structure separates application traffic from productio
 - `recipe-rescue-production-data`: the single shared production PostgreSQL database.
 - `recipe-rescue-production`: the production frontend/backend namespace managed by Argo Rollouts.
 
-Argo Rollouts manages the blue and green application states as ReplicaSets behind active and preview Services. The stable production Service sends traffic to the active ReplicaSet, preview Services expose the new ReplicaSet for smoke tests, and both colors use the same production database service in `recipe-rescue-production-data`.
+Argo Rollouts manages the blue and green application states as ReplicaSets behind active and preview Services. A dedicated production Nginx edge router is exposed through the AWS LoadBalancer and proxies traffic to the active frontend/backend Services. During a deployment, preview Services expose the new ReplicaSet for smoke tests; after those tests pass, Argo Rollouts switches the active Services that Nginx routes to. Both colors use the same production database service in `recipe-rescue-production-data`.
 
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
@@ -154,6 +155,7 @@ Pushes to `main` start the deployment side of the lifecycle:
 3. `Deploy Staging` pins `k8s/overlays/staging` to the new `sha-<12-character-commit-sha>` image tag.
 4. It pushes a normal commit to the `staging` branch.
 5. ArgoCD syncs the staging application from the `staging` branch.
+6. `Staging Live Tests` waits for the live staging workloads, resolves the staging LoadBalancer URL, tests the frontend, health/readiness endpoints, signup/auth flow, and recipes API.
 
 The `staging` branch is an automated deployment-state branch. It should not require manual PR approval, because it is updated by the `Deploy Staging` workflow after `main` has passed PR checks and Docker image publishing. If branch protection is enabled for `staging`, allow GitHub Actions to push to it.
 
@@ -167,7 +169,7 @@ Production promotion is approval-gated and deployment is automated:
 6. The workflow pins production images on `release` to the matching `sha-<12-character-commit-sha>` Docker tag.
 7. The workflow comments on and closes the PR when GitHub allows it.
 8. ArgoCD syncs production from `release`.
-9. Argo Rollouts creates the preview ReplicaSet, runs smoke tests, switches active Services, keeps the old ReplicaSet for 10 minutes, and rolls back automatically if post-promotion health checks fail.
+9. Argo Rollouts creates the preview ReplicaSet, runs smoke tests, switches active Services behind the production Nginx router, keeps the old ReplicaSet for 10 minutes, and rolls back automatically if post-promotion health checks fail.
 
 The `Complete Release Promotion` workflow can also be run manually with the release PR number if an automatic trigger needs to be retried.
 

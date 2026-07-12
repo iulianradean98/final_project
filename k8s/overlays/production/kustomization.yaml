@@ -5,6 +5,9 @@ resources:
   - api-external-secret.yaml
   - backend-preview-service.yaml
   - frontend-preview-service.yaml
+  - nginx-router-config.yaml
+  - nginx-router-deployment.yaml
+  - nginx-router-service.yaml
   - backend-rollout.yaml
   - frontend-rollout.yaml
   - analysis-templates.yaml
@@ -29,6 +32,13 @@ patches:
       - op: replace
         path: /data/ALLOWED_ORIGINS
         value: '["https://recipe-rescue.local"]'
+  - target:
+      kind: Service
+      name: recipe-rescue-web
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: ClusterIP
   - patch: |-
       apiVersion: v1
       kind: Service
