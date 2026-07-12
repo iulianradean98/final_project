@@ -7,6 +7,14 @@ on:
         description: Release approval PR number
         required: true
         type: string
+  pull_request_review:
+    types:
+      - submitted
+  workflow_run:
+    workflows:
+      - Release Checks
+    types:
+      - completed
 
 permissions:
   actions: read
@@ -23,6 +31,18 @@ jobs:
   promote-release:
     name: Promote release to main SHA
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'pull_request_review' &&
+        github.event.review.state == 'approved' &&
+        github.event.pull_request.base.ref == 'release' &&
+        github.event.pull_request.head.ref == 'main'
+      ) ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success'
+      )
 
     steps:
       - name: Checkout repository
@@ -30,11 +50,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate release approval PR
-        id: pr
+      - name: Resolve release approval PR
+        id: resolve-pr
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
-          PR_NUMBER: ${{ inputs.pull_request_number }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_PR_NUMBER: ${{ github.event.inputs.pull_request_number }}
+          REVIEW_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            pr_number="${DISPATCH_PR_NUMBER}"
+          elif [ "${EVENT_NAME}" = "pull_request_review" ]; then
+            pr_number="${REVIEW_PR_NUMBER}"
+          else
+            pr_number="$(gh pr list \
+              --base release \
+              --head main \
+              --state open \
+              --json number \
+              --jq 'map(.number) | first // ""')"
+          fi
+
+          if [ -z "${pr_number}" ]; then
+            echo "No open main -> release PR is ready for automatic promotion."
+            echo "should_promote=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "number=${pr_number}" >> "${GITHUB_OUTPUT}"
+          echo "should_promote=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate release approval PR
+        id: pr
+        if: steps.resolve-pr.outputs.should_promote == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ steps.resolve-pr.outputs.number }}
         run: |
           set -euo pipefail
 
@@ -66,6 +120,12 @@ jobs:
           fi
 
           if [ "${review_decision}" != "APPROVED" ]; then
+            if [ "${EVENT_NAME}" != "workflow_dispatch" ]; then
+              echo "Release PR is not approved yet. Automatic promotion will wait."
+              echo "should_promote=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+
             echo "Release PR must be approved before promotion. Current review decision: ${review_decision}"
             exit 1
           fi
@@ -85,8 +145,10 @@ jobs:
           echo "url=${pr_url}" >> "${GITHUB_OUTPUT}"
           echo "main_sha=${main_sha}" >> "${GITHUB_OUTPUT}"
           echo "release_sha=${release_sha}" >> "${GITHUB_OUTPUT}"
+          echo "should_promote=true" >> "${GITHUB_OUTPUT}"
 
       - name: Verify release checks passed
+        if: steps.pr.outputs.should_promote == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
@@ -95,6 +157,7 @@ jobs:
           gh pr checks "${PR_NUMBER}" --watch --fail-fast=false
 
       - name: Move release to main SHA
+        if: steps.pr.outputs.should_promote == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
           MAIN_SHA: ${{ steps.pr.outputs.main_sha }}
@@ -108,6 +171,7 @@ jobs:
             -F force=true
 
       - name: Comment and close release PR
+        if: steps.pr.outputs.should_promote == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
@@ -124,9 +188,12 @@ jobs:
 
           This PR is being closed because the release branch was promoted directly after approval and passing checks."
 
-          gh pr close "${PR_NUMBER}"
+          if ! gh pr close "${PR_NUMBER}"; then
+            echo "::notice::Release was promoted, but GitHub did not allow the workflow to close PR #${PR_NUMBER}. This can happen when GitHub already considers the PR completed because release now points to main."
+          fi
 
       - name: Write promotion summary
+        if: steps.pr.outputs.should_promote == 'true'
         run: |
           {
             echo "### Release promotion completed"

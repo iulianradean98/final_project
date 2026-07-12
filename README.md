@@ -100,7 +100,7 @@ The ArgoCD structure follows an app-of-apps pattern:
 - `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release`.
 - `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release`.
 
-The `staging` branch stores the automatically deployed staging state after Docker images are published from `main`. The single `release` branch stores the manually approved production deployment state. The `Promote Release` workflow opens a PR from `main` into `release` for validation and human approval. After the PR is approved, the `Complete Release Promotion` workflow moves `release` to the exact same commit SHA as `main`, comments on the PR, closes it, and lets ArgoCD reconcile the production applications from `release`.
+The `staging` branch stores the automatically deployed staging state after Docker images are published from `main`. The single `release` branch stores the manually approved production deployment state. The `Promote Release` workflow opens a PR from `main` into `release` for validation and human approval. After the PR is approved and release checks pass, the `Complete Release Promotion` workflow automatically moves `release` to the exact same commit SHA as `main`, comments on the PR, closes it when GitHub allows that cleanup, and lets ArgoCD reconcile the production applications from `release`.
 
 ArgoCD manifests are checked in CI with:
 
@@ -164,9 +164,11 @@ Production promotion is manual:
 1. Run the `Promote Release` workflow.
 2. The workflow opens a normal PR from `main` into `release`.
 3. Wait for release branch checks and human approval.
-4. Run the `Complete Release Promotion` workflow with the release PR number.
+4. The `Complete Release Promotion` workflow starts automatically after the missing condition arrives: either approval after checks, or checks after approval.
 5. The workflow verifies the PR, approvals, and checks, then updates `release` to the exact same commit SHA as `main`.
-6. The workflow comments on and closes the PR, then ArgoCD syncs production from `release`.
+6. The workflow comments on and closes the PR when GitHub allows it, then ArgoCD syncs production from `release`.
+
+The `Complete Release Promotion` workflow can also be run manually with the release PR number if an automatic trigger needs to be retried.
 
 Protect the `release` branch with required PR review, required release checks, and restricted direct pushes. The `Complete Release Promotion` workflow must be allowed to bypass the release branch update restriction, or it must use a fine-grained token stored as `RELEASE_PROMOTION_TOKEN`. This is required because the workflow intentionally moves the release branch pointer to the approved `main` commit.
 

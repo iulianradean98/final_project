@@ -74,7 +74,7 @@ jobs:
 
           This PR is an approval and validation gate. Do not use the GitHub merge button for this PR.
 
-          After the release checks pass and the PR is approved, run the \`Complete Release Promotion\` workflow with this PR number. That workflow moves \`release\` to the exact same commit SHA as \`main\`, comments on this PR, and closes it.
+          After the release checks pass and the PR is approved, the \`Complete Release Promotion\` workflow moves \`release\` to the exact same commit SHA as \`main\`, comments on this PR, and closes it when GitHub allows that cleanup. The workflow can also be run manually with this PR number if a retry is needed.
 
           After the release branch is promoted, ArgoCD will reconcile the production applications from \`release\`."
 
