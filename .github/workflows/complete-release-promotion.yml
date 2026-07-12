@@ -148,16 +148,69 @@ jobs:
           echo "should_promote=true" >> "${GITHUB_OUTPUT}"
 
       - name: Verify release checks passed
+        id: release-checks
         if: steps.pr.outputs.should_promote == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.main_sha }}
         run: |
           set -euo pipefail
-          gh pr checks "${PR_NUMBER}" --watch --fail-fast=false
+
+          checks_json="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+            --jq '.check_runs | map({name, status, conclusion})')"
+
+          required_checks=(
+            "Release Checks / Kubernetes render"
+            "Release Checks / Kubernetes schema validation"
+            "Release Checks / Kubernetes lint"
+            "Release Checks / Kubernetes project policy"
+            "Release Checks / ArgoCD manifest policy"
+          )
+
+          all_ready=true
+
+          for prefix in "${required_checks[@]}"; do
+            encoded_check="$(echo "${checks_json}" | jq -r --arg prefix "${prefix}" '
+              [.[] | select(.name | startswith($prefix))] | last // empty | @base64
+            ')"
+
+            if [ -z "${encoded_check}" ]; then
+              echo "Missing release check: ${prefix}"
+              all_ready=false
+              continue
+            fi
+
+            check_json="$(echo "${encoded_check}" | base64 --decode)"
+            check_name="$(echo "${check_json}" | jq -r '.name')"
+            check_status="$(echo "${check_json}" | jq -r '.status')"
+            check_conclusion="$(echo "${check_json}" | jq -r '.conclusion')"
+
+            echo "${check_name}: ${check_status} / ${check_conclusion}"
+
+            if [ "${check_status}" != "completed" ] || [ "${check_conclusion}" != "success" ]; then
+              all_ready=false
+            fi
+          done
+
+          if [ "${all_ready}" != "true" ]; then
+            echo "checks_ready=false" >> "${GITHUB_OUTPUT}"
+
+            if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+              echo "Release checks are not all successful yet."
+              exit 1
+            fi
+
+            echo "Release checks are not all successful yet. Automatic promotion will wait for the Release Checks workflow_run trigger."
+            exit 0
+          fi
+
+          echo "checks_ready=true" >> "${GITHUB_OUTPUT}"
 
       - name: Move release to main SHA
-        if: steps.pr.outputs.should_promote == 'true'
+        if: steps.release-checks.outputs.checks_ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
           MAIN_SHA: ${{ steps.pr.outputs.main_sha }}
@@ -171,7 +224,7 @@ jobs:
             -F force=true
 
       - name: Comment and close release PR
-        if: steps.pr.outputs.should_promote == 'true'
+        if: steps.release-checks.outputs.checks_ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
@@ -193,7 +246,7 @@ jobs:
           fi
 
       - name: Write promotion summary
-        if: steps.pr.outputs.should_promote == 'true'
+        if: steps.release-checks.outputs.checks_ready == 'true'
         run: |
           {
             echo "### Release promotion completed"
