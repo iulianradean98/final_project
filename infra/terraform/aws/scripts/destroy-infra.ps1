@@ -1,5 +1,5 @@
 param(
-    [string]$WorkingDirectory = (Resolve-Path "$PSScriptRoot\..").Path,
+    [string]$WorkingDirectory = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [string]$PlanFile = "destroy.tfplan",
     [string]$AwsRegion = "eu-central-1",
     [string]$ClusterName = "recipe-rescue-shared-eks",

@@ -1,0 +1,92 @@
+name: Infrastructure Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: Type DESTROY to confirm deleting the Terraform-managed AWS infrastructure.
+        required: true
+        type: string
+      skip_kubernetes_cleanup:
+        description: Skip Kubernetes and LoadBalancer cleanup before Terraform destroy.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: infrastructure-recovery
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TERRAFORM_DIRECTORY: infra/terraform/aws
+
+jobs:
+  destroy:
+    name: Destroy AWS infrastructure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate manual confirmation
+        env:
+          CONFIRM_DESTROY: ${{ github.event.inputs.confirm_destroy }}
+        run: |
+          set -euo pipefail
+
+          if [ "${CONFIRM_DESTROY}" != "DESTROY" ]; then
+            echo "You must type DESTROY to run this workflow."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+
+      - name: Destroy Terraform-managed infrastructure
+        shell: pwsh
+        working-directory: ${{ env.TERRAFORM_DIRECTORY }}
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+          SKIP_KUBERNETES_CLEANUP: ${{ github.event.inputs.skip_kubernetes_cleanup }}
+        run: |
+          $arguments = @(
+            "-WorkingDirectory", (Get-Location).Path,
+            "-AwsRegion", $env:AWS_REGION,
+            "-AutoApprove"
+          )
+
+          if ($env:SKIP_KUBERNETES_CLEANUP -eq "true") {
+            $arguments += "-SkipKubernetesCleanup"
+          }
+
+          ./scripts/destroy-infra.ps1 @arguments
+
+      - name: Write destroy summary
+        if: always()
+        run: |
+          {
+            echo "### Infrastructure destroy"
+            echo ""
+            echo "- Confirmation: \`${{ github.event.inputs.confirm_destroy }}\`"
+            echo "- Kubernetes cleanup skipped: \`${{ github.event.inputs.skip_kubernetes_cleanup }}\`"
+            echo "- Terraform directory: \`${{ env.TERRAFORM_DIRECTORY }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
