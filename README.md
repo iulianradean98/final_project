@@ -100,7 +100,7 @@ The ArgoCD structure follows an app-of-apps pattern:
 - `recipe-rescue-production-blue` syncs `k8s/overlays/production-blue` from `release`.
 - `recipe-rescue-production-green` syncs `k8s/overlays/production-green` from `release`.
 
-The `staging` branch stores the automatically deployed staging state after Docker images are published from `main`. The single `release` branch stores the manually approved production deployment state. The `Promote Release` workflow opens a PR from `main` into `release`; after that PR is approved and merged, ArgoCD reconciles the production applications from `release`.
+The `staging` branch stores the automatically deployed staging state after Docker images are published from `main`. The single `release` branch stores the manually approved production deployment state. The `Promote Release` workflow opens a PR from `main` into `release` for validation and human approval. After the PR is approved, the `Complete Release Promotion` workflow moves `release` to the exact same commit SHA as `main`, comments on the PR, closes it, and lets ArgoCD reconcile the production applications from `release`.
 
 ArgoCD manifests are checked in CI with:
 
@@ -164,9 +164,11 @@ Production promotion is manual:
 1. Run the `Promote Release` workflow.
 2. The workflow opens a normal PR from `main` into `release`.
 3. Wait for release branch checks and human approval.
-4. Merge into `release`, then ArgoCD syncs production from that approved branch.
+4. Run the `Complete Release Promotion` workflow with the release PR number.
+5. The workflow verifies the PR, approvals, and checks, then updates `release` to the exact same commit SHA as `main`.
+6. The workflow comments on and closes the PR, then ArgoCD syncs production from `release`.
 
-Protect the `release` branch with required PR review, required release checks, blocked force pushes, and restricted direct pushes. That makes deployment approval happen through the release PR.
+Protect the `release` branch with required PR review, required release checks, and restricted direct pushes. The `Complete Release Promotion` workflow must be allowed to bypass the release branch update restriction, or it must use a fine-grained token stored as `RELEASE_PROMOTION_TOKEN`. This is required because the workflow intentionally moves the release branch pointer to the approved `main` commit.
 
 Create the `release` branch once from `main` after the CI/CD workflow files are merged, then protect it. GitHub uses workflow files from the target branch for PR checks, so the release branch must contain `release-checks.yml` before promotion PRs can be validated.
 
