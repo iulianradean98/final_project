@@ -1,0 +1,138 @@
+name: Complete Release Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Release approval PR number
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: write
+  statuses: read
+
+concurrency:
+  group: complete-release-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote-release:
+    name: Promote release to main SHA
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate release approval PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
+          PR_NUMBER: ${{ inputs.pull_request_number }}
+        run: |
+          set -euo pipefail
+
+          pr_json="$(gh pr view "${PR_NUMBER}" \
+            --json number,state,isDraft,baseRefName,headRefName,headRefOid,reviewDecision,url \
+            --jq '.')"
+
+          state="$(echo "${pr_json}" | jq -r '.state')"
+          is_draft="$(echo "${pr_json}" | jq -r '.isDraft')"
+          base_ref="$(echo "${pr_json}" | jq -r '.baseRefName')"
+          head_ref="$(echo "${pr_json}" | jq -r '.headRefName')"
+          head_sha="$(echo "${pr_json}" | jq -r '.headRefOid')"
+          review_decision="$(echo "${pr_json}" | jq -r '.reviewDecision')"
+          pr_url="$(echo "${pr_json}" | jq -r '.url')"
+
+          if [ "${state}" != "OPEN" ]; then
+            echo "Release PR must be open. Current state: ${state}"
+            exit 1
+          fi
+
+          if [ "${is_draft}" = "true" ]; then
+            echo "Release PR must be ready for review, not draft."
+            exit 1
+          fi
+
+          if [ "${base_ref}" != "release" ] || [ "${head_ref}" != "main" ]; then
+            echo "Release PR must be main -> release. Found ${head_ref} -> ${base_ref}."
+            exit 1
+          fi
+
+          if [ "${review_decision}" != "APPROVED" ]; then
+            echo "Release PR must be approved before promotion. Current review decision: ${review_decision}"
+            exit 1
+          fi
+
+          main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          release_sha="$(git ls-remote origin refs/heads/release | awk '{print $1}')"
+
+          if [ "${head_sha}" != "${main_sha}" ]; then
+            echo "The PR head no longer matches current main."
+            echo "PR head: ${head_sha}"
+            echo "Main:    ${main_sha}"
+            echo "Refresh or recreate the release PR, then try again."
+            exit 1
+          fi
+
+          echo "number=${PR_NUMBER}" >> "${GITHUB_OUTPUT}"
+          echo "url=${pr_url}" >> "${GITHUB_OUTPUT}"
+          echo "main_sha=${main_sha}" >> "${GITHUB_OUTPUT}"
+          echo "release_sha=${release_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify release checks passed
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          gh pr checks "${PR_NUMBER}" --watch --fail-fast=false
+
+      - name: Move release to main SHA
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
+          MAIN_SHA: ${{ steps.pr.outputs.main_sha }}
+        run: |
+          set -euo pipefail
+
+          gh api \
+            --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/git/refs/heads/release" \
+            -f sha="${MAIN_SHA}" \
+            -F force=true
+
+      - name: Comment and close release PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          MAIN_SHA: ${{ steps.pr.outputs.main_sha }}
+          RELEASE_SHA: ${{ steps.pr.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+
+          gh pr comment "${PR_NUMBER}" --body "Release promotion completed by automation.
+
+          - Previous release SHA: \`${RELEASE_SHA}\`
+          - New release SHA: \`${MAIN_SHA}\`
+          - Result: \`release\` now points to the exact same commit as \`main\`
+
+          This PR is being closed because the release branch was promoted directly after approval and passing checks."
+
+          gh pr close "${PR_NUMBER}"
+
+      - name: Write promotion summary
+        run: |
+          {
+            echo "### Release promotion completed"
+            echo ""
+            echo "- PR: ${{ steps.pr.outputs.url }}"
+            echo "- Previous release SHA: \`${{ steps.pr.outputs.release_sha }}\`"
+            echo "- New release SHA: \`${{ steps.pr.outputs.main_sha }}\`"
+            echo "- Result: \`release\` now points to the exact same commit as \`main\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

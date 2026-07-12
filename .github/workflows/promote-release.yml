@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 concurrency:
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   open-release-pr:
-    name: Open rebase-friendly release PR
+    name: Open release approval PR
     runs-on: ubuntu-latest
 
     steps:
@@ -31,31 +31,23 @@ jobs:
             exit 1
           fi
 
-      - name: Create release promotion branch
+      - name: Check release drift
         run: |
           set -euo pipefail
 
-          promotion_branch="release-promotion"
+          main_sha="$(git rev-parse origin/main)"
+          release_sha="$(git rev-parse origin/release)"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "main_sha=${main_sha}" >> "${GITHUB_ENV}"
+          echo "release_sha=${release_sha}" >> "${GITHUB_ENV}"
 
-          git switch -C "${promotion_branch}" origin/release
-          git rm -r --ignore-unmatch .
-          git checkout origin/main -- .
-          git add -A
-
-          if git diff --cached --quiet; then
-            echo "Release already matches main. No promotion PR is needed."
+          if [ "${main_sha}" = "${release_sha}" ]; then
+            echo "Release already points to main. No promotion PR is needed."
             echo "promotion_needed=false" >> "${GITHUB_ENV}"
             exit 0
           fi
 
-          git commit -m "Promote main to release"
-          git push --force-with-lease origin "${promotion_branch}:${promotion_branch}"
-
           echo "promotion_needed=true" >> "${GITHUB_ENV}"
-          echo "promotion_branch=${promotion_branch}" >> "${GITHUB_ENV}"
 
       - name: Open release pull request
         if: env.promotion_needed == 'true'
@@ -63,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           existing_pr="$(gh pr list \
-            --head "${promotion_branch}" \
+            --head main \
             --base release \
             --state open \
             --json number \
@@ -76,13 +68,15 @@ jobs:
 
           gh pr create \
             --base release \
-            --head "${promotion_branch}" \
+            --head main \
             --title "Promote main to release" \
             --body "Promotes the validated main branch into the protected release branch.
 
-          This workflow creates a short-lived promotion branch based on \`release\`, then applies the current \`main\` file tree as one commit. That keeps the PR compatible with rebase/linear-history branch protection.
+          This PR is an approval and validation gate. Do not use the GitHub merge button for this PR.
 
-          After this PR is approved and merged, ArgoCD will reconcile the production applications from \`release\`."
+          After the release checks pass and the PR is approved, run the \`Complete Release Promotion\` workflow with this PR number. That workflow moves \`release\` to the exact same commit SHA as \`main\`, comments on this PR, and closes it.
+
+          After the release branch is promoted, ArgoCD will reconcile the production applications from \`release\`."
 
       - name: Write promotion summary
         run: |
@@ -91,6 +85,7 @@ jobs:
             echo ""
             echo "- Source branch: \`main\`"
             echo "- Target branch: \`release\`"
-            echo "- Promotion branch: \`${promotion_branch:-not created}\`"
-            echo "- Approval gate: protected release PR"
+            echo "- Source SHA: \`${main_sha:-not checked}\`"
+            echo "- Current release SHA: \`${release_sha:-not checked}\`"
+            echo "- Approval gate: release PR plus Complete Release Promotion workflow"
           } >> "${GITHUB_STEP_SUMMARY}"
