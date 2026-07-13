@@ -9,6 +9,7 @@ resources:
   - nginx-router-config.yaml
   - nginx-router-deployment.yaml
   - nginx-router-service.yaml
+  - rollout-observer-rbac.yaml
   - backend-rollout.yaml
   - frontend-rollout.yaml
   - analysis-templates.yaml
