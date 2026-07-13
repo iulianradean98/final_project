@@ -85,6 +85,8 @@ Argo Rollouts manages the blue and green application states as ReplicaSets behin
 
 Before the production backend Rollout promotes the preview ReplicaSet to active traffic, Argo Rollouts runs a pre-promotion PostgreSQL backup job. That job writes a deployment safety backup to `s3://<backup-bucket>/recipe-rescue/production/prepromotion/`. If the backup fails, the backend traffic switch does not happen.
 
+The frontend Rollout also runs a pre-promotion API compatibility check against the active backend health, readiness, and recipes endpoints. This prevents a frontend traffic switch when the backend service it depends on is not healthy.
+
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
 For AWS/EKS, real secret values live in AWS Secrets Manager. External Secrets Operator reads those values and creates Kubernetes Secrets in the correct namespaces. This keeps passwords and GitHub tokens out of Git and out of ArgoCD manifests.
