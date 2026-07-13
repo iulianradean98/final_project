@@ -2,3 +2,4 @@ awsRegion: eu-central-1
 argocdGithubRepoSecret: recipe-rescue/argocd/github-repo
 repoUrl: https://github.com/iulianradean98/final_project.git
 rootTargetRevision: main
+chartRevision: ""

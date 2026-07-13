@@ -2,5 +2,5 @@ apiVersion: v2
 name: recipe-rescue-platform
 description: Recipe Rescue cluster bootstrap resources managed after ArgoCD and External Secrets are installed.
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.2.0
+appVersion: "0.2.0"

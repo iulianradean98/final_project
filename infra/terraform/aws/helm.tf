@@ -84,6 +84,10 @@ resource "helm_release" "recipe_rescue_platform" {
       argocdGithubRepoSecret = var.argocd_github_repo_secret_name
       repoUrl                = var.github_repo_url
       rootTargetRevision     = var.argocd_root_target_revision
+      chartRevision = sha256(join("", [
+        for file_path in sort(fileset("${path.module}/charts/recipe-rescue-platform", "**")) :
+        filesha256("${path.module}/charts/recipe-rescue-platform/${file_path}")
+      ]))
     }),
   ]
 

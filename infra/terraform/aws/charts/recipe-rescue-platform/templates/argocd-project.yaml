@@ -3,6 +3,8 @@ kind: AppProject
 metadata:
   name: recipe-rescue
   namespace: argocd
+  annotations:
+    recipe-rescue.local/chart-revision: {{ .Values.chartRevision | quote }}
 spec:
   description: Recipe Rescue GitOps project
   sourceRepos:
