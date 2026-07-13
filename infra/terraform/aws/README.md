@@ -43,10 +43,10 @@ This is a real AWS EKS environment, not a free-tier-only environment. EKS has a 
 
 The default variables are intentionally professional for a final DevOps presentation:
 
-- four `t3.small` worker nodes by default, with a minimum of two
+- five `t3.small` worker nodes by default, with a minimum of two and room to scale to six
 - worker nodes placed in private subnets
 - one shared NAT Gateway for private subnet internet egress
-- maximum node count limited to `4`
+- enough spare pod capacity for staging, production, ArgoCD, PostgreSQL, blue/green preview pods, and rollout smoke-test jobs
 
 This is more expensive than the lowest-cost demo mode, but it is easier to justify architecturally because application workloads are not placed directly in public subnets.
 
