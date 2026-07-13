@@ -177,11 +177,11 @@ function Wait-ForAwsVpcCleanup {
         return [string]::IsNullOrWhiteSpace($classic) -and [string]::IsNullOrWhiteSpace($v2)
     }
 
-    Wait-ForCondition "public IP mappings in $VpcId are removed" $WaitSeconds {
+    Wait-ForCondition "non-NAT public IP mappings in $VpcId are removed" $WaitSeconds {
         $publicMappings = & aws ec2 describe-network-interfaces `
             --region $Region `
             --filters "Name=vpc-id,Values=$VpcId" `
-            --query "NetworkInterfaces[?Association.PublicIp!=null].NetworkInterfaceId" `
+            --query "NetworkInterfaces[?Association.PublicIp!=null && InterfaceType!='nat_gateway'].NetworkInterfaceId" `
             --output text 2>$null
 
         return [string]::IsNullOrWhiteSpace($publicMappings)
