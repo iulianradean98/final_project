@@ -1,6 +1,73 @@
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
+  name: recipe-rescue-production-db-prepromotion-backup
+spec:
+  metrics:
+    - name: production-db-prepromotion-backup
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 900
+            ttlSecondsAfterFinished: 1800
+            template:
+              spec:
+                restartPolicy: Never
+                serviceAccountName: recipe-rescue-db-backup
+                containers:
+                  - name: backup
+                    image: postgres:17-alpine
+                    imagePullPolicy: IfNotPresent
+                    envFrom:
+                      - secretRef:
+                          name: recipe-rescue-db-backup-secret
+                    env:
+                      - name: AWS_REGION
+                        value: eu-central-1
+                      - name: BACKUP_S3_BUCKET
+                        value: recipe-rescue-db-backups-iulian-2026
+                      - name: BACKUP_S3_PREFIX
+                        value: recipe-rescue/production/prepromotion
+                      - name: BACKUP_NAME
+                        value: production-prepromotion
+                      - name: POSTGRES_HOST
+                        value: recipe-rescue-postgres.recipe-rescue-production-data.svc.cluster.local
+                    command:
+                      - /bin/sh
+                      - -ec
+                    args:
+                      - |
+                        apk add --no-cache aws-cli gzip
+                        timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                        backup_file="/tmp/${BACKUP_NAME}-${timestamp}.sql.gz"
+                        export PGPASSWORD="${POSTGRES_PASSWORD}"
+
+                        pg_dump \
+                          -h "${POSTGRES_HOST}" \
+                          -U "${POSTGRES_USER}" \
+                          -d "${POSTGRES_DB}" \
+                          --clean \
+                          --if-exists \
+                          --no-owner \
+                          --no-privileges |
+                          gzip > "${backup_file}"
+
+                        aws s3 cp "${backup_file}" "s3://${BACKUP_S3_BUCKET}/${BACKUP_S3_PREFIX}/${BACKUP_NAME}-${timestamp}.sql.gz"
+                        aws s3 cp "${backup_file}" "s3://${BACKUP_S3_BUCKET}/${BACKUP_S3_PREFIX}/latest.sql.gz"
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
   name: recipe-rescue-api-preview-smoke
 spec:
   metrics:

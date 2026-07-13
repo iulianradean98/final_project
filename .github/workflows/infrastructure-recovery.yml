@@ -12,6 +12,17 @@ on:
           - approval
           - auto
           - plan-only
+      database_restore_mode:
+        description: Restore PostgreSQL data from S3 after infrastructure recovery.
+        required: true
+        default: skip
+        type: choice
+        options:
+          - skip
+          - production-latest
+          - production-prepromotion-latest
+          - staging-latest
+          - both-latest
   schedule:
     - cron: "17 * * * *"
 
@@ -27,7 +38,11 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_VAR_eks_admin_principal_arns: ${{ vars.EKS_ADMIN_PRINCIPAL_ARNS || '[]' }}
+  TF_VAR_db_backup_s3_bucket_name: ${{ vars.DB_BACKUP_S3_BUCKET || 'recipe-rescue-db-backups-iulian-2026' }}
   TERRAFORM_DIRECTORY: infra/terraform/aws
+  AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+  CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'recipe-rescue-shared-eks' }}
+  DB_BACKUP_S3_BUCKET: ${{ vars.DB_BACKUP_S3_BUCKET || 'recipe-rescue-db-backups-iulian-2026' }}
 
 jobs:
   plan:
@@ -37,6 +52,7 @@ jobs:
     outputs:
       drift_detected: ${{ steps.plan.outputs.drift_detected }}
       recovery_mode: ${{ steps.mode.outputs.recovery_mode }}
+      database_restore_mode: ${{ steps.mode.outputs.database_restore_mode }}
 
     steps:
       - name: Checkout repository
@@ -47,16 +63,21 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MODE: ${{ github.event.inputs.recovery_mode }}
+          INPUT_DATABASE_RESTORE_MODE: ${{ github.event.inputs.database_restore_mode }}
           CONFIGURED_MODE: ${{ vars.INFRA_RECOVERY_MODE }}
+          CONFIGURED_DATABASE_RESTORE_MODE: ${{ vars.INFRA_DATABASE_RESTORE_MODE }}
         run: |
           set -euo pipefail
 
           if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
             recovery_mode="${INPUT_MODE}"
+            database_restore_mode="${INPUT_DATABASE_RESTORE_MODE}"
           elif [ -n "${CONFIGURED_MODE}" ]; then
             recovery_mode="${CONFIGURED_MODE}"
+            database_restore_mode="${CONFIGURED_DATABASE_RESTORE_MODE:-skip}"
           else
             recovery_mode="approval"
+            database_restore_mode="skip"
           fi
 
           case "${recovery_mode}" in
@@ -67,7 +88,16 @@ jobs:
               ;;
           esac
 
+          case "${database_restore_mode}" in
+            skip|production-latest|production-prepromotion-latest|staging-latest|both-latest) ;;
+            *)
+              echo "Invalid database restore mode: ${database_restore_mode}. Use skip, production-latest, production-prepromotion-latest, staging-latest, or both-latest."
+              exit 1
+              ;;
+          esac
+
           echo "recovery_mode=${recovery_mode}" >> "${GITHUB_OUTPUT}"
+          echo "database_restore_mode=${database_restore_mode}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
@@ -123,6 +153,7 @@ jobs:
             echo "### Infrastructure recovery"
             echo ""
             echo "- Mode: \`${{ steps.mode.outputs.recovery_mode }}\`"
+            echo "- Database restore mode: \`${{ steps.mode.outputs.database_restore_mode }}\`"
             echo "- Drift detected: \`${{ steps.plan.outputs.drift_detected }}\`"
             echo "- Terraform directory: \`${{ env.TERRAFORM_DIRECTORY }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -198,3 +229,144 @@ jobs:
       - name: Apply automatic recovery plan
         working-directory: ${{ env.TERRAFORM_DIRECTORY }}
         run: terraform apply -auto-approve recovery.tfplan
+
+  restore-database:
+    name: Restore PostgreSQL data from S3
+    runs-on: ubuntu-latest
+    needs:
+      - plan
+      - apply-with-approval
+      - apply-automatically
+    if: always() && needs.plan.outputs.drift_detected == 'true' && needs.plan.outputs.database_restore_mode != 'skip' && (needs.apply-with-approval.result == 'success' || needs.apply-automatically.result == 'success')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${CLUSTER_NAME}"
+
+      - name: Restore selected database backups
+        env:
+          DATABASE_RESTORE_MODE: ${{ needs.plan.outputs.database_restore_mode }}
+        run: |
+          set -euo pipefail
+
+          restore_database() {
+            namespace="$1"
+            backup_prefix="$2"
+            restore_name="$3"
+
+            echo "Waiting for PostgreSQL in namespace ${namespace}..."
+            kubectl wait \
+              --for=condition=Ready \
+              pod \
+              -l app.kubernetes.io/name=recipe-rescue-postgres \
+              -n "${namespace}" \
+              --timeout=900s
+
+            kubectl delete job recipe-rescue-db-restore -n "${namespace}" --ignore-not-found
+
+            cat <<YAML | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: recipe-rescue-db-restore
+            namespace: ${namespace}
+            labels:
+              app.kubernetes.io/name: recipe-rescue-db-restore
+              app.kubernetes.io/component: database-restore
+          spec:
+            backoffLimit: 1
+            activeDeadlineSeconds: 900
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: recipe-rescue-db-restore
+                  app.kubernetes.io/component: database-restore
+              spec:
+                restartPolicy: Never
+                serviceAccountName: recipe-rescue-db-backup
+                containers:
+                  - name: restore
+                    image: postgres:17-alpine
+                    imagePullPolicy: IfNotPresent
+                    envFrom:
+                      - secretRef:
+                          name: recipe-rescue-postgres-secret
+                    env:
+                      - name: AWS_REGION
+                        value: ${AWS_REGION}
+                      - name: BACKUP_S3_BUCKET
+                        value: ${DB_BACKUP_S3_BUCKET}
+                      - name: BACKUP_S3_PREFIX
+                        value: ${backup_prefix}
+                      - name: POSTGRES_HOST
+                        value: recipe-rescue-postgres
+                    command:
+                      - /bin/sh
+                      - -ec
+                    args:
+                      - |
+                        apk add --no-cache aws-cli gzip
+                        export PGPASSWORD="\${POSTGRES_PASSWORD}"
+                        aws s3 cp "s3://\${BACKUP_S3_BUCKET}/\${BACKUP_S3_PREFIX}/latest.sql.gz" /tmp/latest.sql.gz
+                        gunzip -c /tmp/latest.sql.gz |
+                          psql \
+                            -h "\${POSTGRES_HOST}" \
+                            -U "\${POSTGRES_USER}" \
+                            -d "\${POSTGRES_DB}" \
+                            -v ON_ERROR_STOP=1
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+          YAML
+
+            if ! kubectl wait --for=condition=Complete job/recipe-rescue-db-restore -n "${namespace}" --timeout=900s; then
+              kubectl logs job/recipe-rescue-db-restore -n "${namespace}" || true
+              exit 1
+            fi
+
+            kubectl logs job/recipe-rescue-db-restore -n "${namespace}"
+            echo "Restored ${restore_name} database from s3://${DB_BACKUP_S3_BUCKET}/${backup_prefix}/latest.sql.gz"
+          }
+
+          case "${DATABASE_RESTORE_MODE}" in
+            production-latest)
+              restore_database "recipe-rescue-production-data" "recipe-rescue/production" "production"
+              ;;
+            production-prepromotion-latest)
+              restore_database "recipe-rescue-production-data" "recipe-rescue/production/prepromotion" "production pre-promotion"
+              ;;
+            staging-latest)
+              restore_database "recipe-rescue-staging" "recipe-rescue/staging" "staging"
+              ;;
+            both-latest)
+              restore_database "recipe-rescue-production-data" "recipe-rescue/production" "production"
+              restore_database "recipe-rescue-staging" "recipe-rescue/staging" "staging"
+              ;;
+          esac
+
+      - name: Write database restore summary
+        run: |
+          {
+            echo "### Database restore"
+            echo ""
+            echo "- Mode: \`${{ needs.plan.outputs.database_restore_mode }}\`"
+            echo "- Backup bucket: \`${{ env.DB_BACKUP_S3_BUCKET }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

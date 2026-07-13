@@ -53,3 +53,16 @@ patches:
         name: recipe-rescue-web
         namespace: recipe-rescue
       $patch: delete
+  - target:
+      kind: CronJob
+      name: recipe-rescue-db-backup
+    patch: |-
+      - op: replace
+        path: /spec/schedule
+        value: "7 * * * *"
+      - op: replace
+        path: /spec/jobTemplate/spec/template/spec/containers/0/env/2/value
+        value: recipe-rescue/production
+      - op: replace
+        path: /spec/jobTemplate/spec/template/spec/containers/0/env/3/value
+        value: production

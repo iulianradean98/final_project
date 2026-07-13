@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - ../../base
   - api-external-secret.yaml
+  - db-backup-external-secret.yaml
   - backend-preview-service.yaml
   - frontend-preview-service.yaml
   - nginx-router-config.yaml
@@ -65,5 +66,12 @@ patches:
       kind: Deployment
       metadata:
         name: recipe-rescue-web
+        namespace: recipe-rescue
+      $patch: delete
+  - patch: |-
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: recipe-rescue-db-backup
         namespace: recipe-rescue
       $patch: delete

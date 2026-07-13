@@ -12,6 +12,7 @@ It creates:
 - one EKS managed node group for running ArgoCD, frontend, backend, and PostgreSQL
 - AWS EBS CSI Driver for dynamic Kubernetes persistent volumes
 - encrypted default `gp3` Kubernetes StorageClass
+- EKS Pod Identity permissions for PostgreSQL backup/restore jobs to use the external S3 backup bucket
 - ArgoCD installed with Helm
 - External Secrets Operator installed with Helm
 - EKS Pod Identity for External Secrets Operator
@@ -32,6 +33,7 @@ Terraform lets us describe infrastructure in files instead of creating it manual
 - `helm.tf`: installs ArgoCD, External Secrets Operator, and the small Recipe Rescue platform bootstrap chart.
 - `external-secrets.tf`: creates the IAM role and EKS Pod Identity association that allow External Secrets Operator to read `recipe-rescue/*` secrets from AWS Secrets Manager.
 - `ebs-csi.tf`: installs the AWS EBS CSI Driver and default encrypted `gp3` StorageClass used by PostgreSQL PVCs.
+- `db-backups.tf`: creates the IAM role and EKS Pod Identity associations that allow database backup/restore jobs to access the external PostgreSQL backup S3 bucket.
 - `outputs.tf`: prints useful values after deployment, including the `aws eks update-kubeconfig` command.
 - `terraform.tfvars.example`: safe example values. Copy it to `terraform.tfvars` locally and adjust if needed.
 - `charts/recipe-rescue-platform`: local Helm chart for cluster bootstrap resources that depend on ArgoCD and External Secrets CRDs.
@@ -254,6 +256,109 @@ terraform init
 ```
 
 and use the same S3 state file.
+
+## Database Disaster Recovery
+
+PostgreSQL runs inside Kubernetes for this capstone, so database disaster recovery needs an external backup location. Persistent volumes protect normal pod and node restarts, but they are not enough for a full cluster rebuild.
+
+This project uses an external S3 bucket for compressed PostgreSQL dumps:
+
+- staging writes to `s3://<bucket>/recipe-rescue/staging/`
+- production writes to `s3://<bucket>/recipe-rescue/production/`
+- production pre-promotion backups write to `s3://<bucket>/recipe-rescue/production/prepromotion/`
+- each run writes a timestamped dump and refreshes `latest.sql.gz`
+
+The backup bucket is intentionally outside this Terraform stack. The EKS platform can be destroyed and recreated, while the backup bucket survives.
+
+Create the bucket once with AWS CLI:
+
+```powershell
+$bucket = "recipe-rescue-db-backups-iulian-2026"
+$region = "eu-central-1"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+aws s3api create-bucket `
+  --bucket $bucket `
+  --region $region `
+  --create-bucket-configuration LocationConstraint=$region
+
+aws s3api put-public-access-block `
+  --bucket $bucket `
+  --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+aws s3api put-bucket-versioning `
+  --bucket $bucket `
+  --versioning-configuration Status=Enabled
+
+$encryptionJson = @'
+{
+  "Rules": [
+    {
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+      }
+    }
+  ]
+}
+'@
+
+[System.IO.File]::WriteAllText("$env:TEMP\db-backup-encryption.json", $encryptionJson, $utf8NoBom)
+
+aws s3api put-bucket-encryption `
+  --bucket $bucket `
+  --server-side-encryption-configuration "file://$env:TEMP\db-backup-encryption.json"
+
+$lifecycleJson = @'
+{
+  "Rules": [
+    {
+      "ID": "expire-recipe-rescue-database-backups",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "recipe-rescue/"
+      },
+      "Expiration": {
+        "Days": 30
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 30
+      }
+    }
+  ]
+}
+'@
+
+[System.IO.File]::WriteAllText("$env:TEMP\db-backup-lifecycle.json", $lifecycleJson, $utf8NoBom)
+
+aws s3api put-bucket-lifecycle-configuration `
+  --bucket $bucket `
+  --lifecycle-configuration "file://$env:TEMP\db-backup-lifecycle.json"
+```
+
+Then set this GitHub repository variable:
+
+```text
+DB_BACKUP_S3_BUCKET=recipe-rescue-db-backups-iulian-2026
+```
+
+Terraform creates an IAM role and EKS Pod Identity associations for the Kubernetes service account `recipe-rescue-db-backup` in the staging and production-data namespaces. No AWS access keys are stored in Kubernetes manifests.
+
+The Kubernetes backup CronJobs are managed by ArgoCD:
+
+- staging runs at minute `37` every hour
+- production runs at minute `7` every hour
+
+The `Infrastructure Recovery` workflow includes a database restore mode:
+
+- `skip`: rebuild infrastructure only
+- `production-latest`: restore production from `recipe-rescue/production/latest.sql.gz`
+- `production-prepromotion-latest`: restore production from `recipe-rescue/production/prepromotion/latest.sql.gz`
+- `staging-latest`: restore staging from `recipe-rescue/staging/latest.sql.gz`
+- `both-latest`: restore both environments
+
+Use restore modes only for disaster recovery or controlled demos. Restoring from `latest.sql.gz` intentionally overwrites the target database with the backup contents.
+
+Production deployments also create a database backup during the backend Rollout pre-promotion phase. This gives every production traffic switch a safety checkpoint. Application rollback stays automatic through Argo Rollouts, while database restore stays explicit because restoring a database can overwrite valid user changes created after the deployment.
 
 ## What Comes Next
 
