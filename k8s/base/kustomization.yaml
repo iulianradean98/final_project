@@ -3,6 +3,8 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - app-config.yaml
+  - db-backup-serviceaccount.yaml
+  - db-backup-cronjob.yaml
   - postgres-service.yaml
   - postgres-statefulset.yaml
   - backend-service.yaml
