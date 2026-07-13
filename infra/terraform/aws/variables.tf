@@ -145,3 +145,15 @@ variable "secrets_manager_prefix" {
   type        = string
   default     = "recipe-rescue/"
 }
+
+variable "db_backup_s3_bucket_name" {
+  description = "Existing S3 bucket used for PostgreSQL disaster-recovery backups. The bucket is intentionally created outside this destroyable EKS stack."
+  type        = string
+  default     = "recipe-rescue-db-backups-iulian-2026"
+}
+
+variable "db_backup_s3_prefix" {
+  description = "S3 key prefix used for PostgreSQL backups inside db_backup_s3_bucket_name."
+  type        = string
+  default     = "recipe-rescue"
+}
