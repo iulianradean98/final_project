@@ -21,7 +21,7 @@ spec:
       prePromotionAnalysis:
         templates:
           - templateName: recipe-rescue-web-preview-smoke
-          - templateName: recipe-rescue-web-api-compatibility
+          - templateName: recipe-rescue-web-backend-rollout-ready
       postPromotionAnalysis:
         templates:
           - templateName: recipe-rescue-web-active-health
