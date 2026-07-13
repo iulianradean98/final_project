@@ -83,6 +83,10 @@ The production blue-green structure separates application traffic from productio
 
 Argo Rollouts manages the blue and green application states as ReplicaSets behind active and preview Services. A dedicated production Nginx edge router is exposed through the AWS LoadBalancer and proxies traffic to the active frontend/backend Services. During a deployment, preview Services expose the new ReplicaSet for smoke tests; after those tests pass, Argo Rollouts switches the active Services that Nginx routes to. Both colors use the same production database service in `recipe-rescue-production-data`.
 
+Before the production backend Rollout promotes the preview ReplicaSet to active traffic, Argo Rollouts runs a pre-promotion PostgreSQL backup job. That job writes a deployment safety backup to `s3://<backup-bucket>/recipe-rescue/production/prepromotion/`. If the backup fails, the backend traffic switch does not happen.
+
+The frontend Rollout also runs a pre-promotion API compatibility check against the active backend health, readiness, and recipes endpoints. This prevents a frontend traffic switch when the backend service it depends on is not healthy.
+
 Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
 
 For AWS/EKS, real secret values live in AWS Secrets Manager. External Secrets Operator reads those values and creates Kubernetes Secrets in the correct namespaces. This keeps passwords and GitHub tokens out of Git and out of ArgoCD manifests.
@@ -116,6 +120,7 @@ Terraform also installs the cluster platform services used by the deployment flo
 - Argo Rollouts through Helm for automated blue-green production deployments
 - External Secrets Operator through Helm
 - EKS Pod Identity permissions for reading AWS Secrets Manager
+- EKS Pod Identity permissions for PostgreSQL backup/restore jobs that use the external S3 backup bucket
 
 Start with:
 
@@ -184,6 +189,23 @@ Pull requests into `release` run deployment-readiness checks:
 - Kubernetes lint
 - Kubernetes project policy
 - ArgoCD manifest policy
+
+## Database Backups And Disaster Recovery
+
+PostgreSQL data is protected in two layers:
+
+- normal runtime persistence through Kubernetes PVCs backed by AWS EBS volumes
+- disaster-recovery backups through scheduled PostgreSQL dumps uploaded to S3
+
+The S3 backup bucket is intentionally created outside the destroyable EKS Terraform stack, similar to the Terraform state bucket. The cluster can be destroyed and recreated while the database backups remain available.
+
+ArgoCD deploys database backup CronJobs:
+
+- staging writes to `s3://<backup-bucket>/recipe-rescue/staging/`
+- production writes to `s3://<backup-bucket>/recipe-rescue/production/`
+- production pre-promotion backups write to `s3://<backup-bucket>/recipe-rescue/production/prepromotion/`
+
+The infrastructure recovery workflow can optionally restore `latest.sql.gz` after rebuilding the platform. This gives the capstone a complete recovery story: Terraform recreates AWS/EKS, ArgoCD redeploys the app, and the recovery workflow can restore PostgreSQL data from S3.
 
 ## Application Pages
 

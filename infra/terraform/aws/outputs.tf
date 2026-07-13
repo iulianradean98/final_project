@@ -3,6 +3,11 @@ output "aws_region" {
   value       = var.aws_region
 }
 
+output "db_backup_s3_bucket_name" {
+  description = "Existing S3 bucket expected to contain PostgreSQL disaster-recovery backups."
+  value       = var.db_backup_s3_bucket_name
+}
+
 output "cluster_name" {
   description = "EKS cluster name."
   value       = module.eks.cluster_name

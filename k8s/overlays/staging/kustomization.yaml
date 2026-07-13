@@ -25,3 +25,16 @@ patches:
       - op: replace
         path: /data/ALLOWED_ORIGINS
         value: '["http://localhost:3001","http://recipe-rescue-staging.local"]'
+  - target:
+      kind: CronJob
+      name: recipe-rescue-db-backup
+    patch: |-
+      - op: replace
+        path: /spec/schedule
+        value: "37 * * * *"
+      - op: replace
+        path: /spec/jobTemplate/spec/template/spec/containers/0/env/2/value
+        value: recipe-rescue/staging
+      - op: replace
+        path: /spec/jobTemplate/spec/template/spec/containers/0/env/3/value
+        value: staging
