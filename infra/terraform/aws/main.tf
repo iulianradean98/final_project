@@ -65,6 +65,17 @@ module "eks" {
   subnet_ids               = var.use_private_nodes ? module.vpc.private_subnets : module.vpc.public_subnets
   control_plane_subnet_ids = module.vpc.private_subnets
 
+  node_security_group_additional_rules = {
+    ingress_self_all = {
+      description = "Allow worker nodes and pods to communicate across nodes"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "ingress"
+      self        = true
+    }
+  }
+
   eks_managed_node_groups = {
     general = {
       ami_type       = "AL2023_x86_64_STANDARD"
