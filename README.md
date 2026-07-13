@@ -87,9 +87,9 @@ Before the production backend Rollout promotes the preview ReplicaSet to active 
 
 The frontend Rollout also runs a pre-promotion backend rollout-state check. It waits until the backend Rollout is healthy and its current ReplicaSet is the stable ReplicaSet. This prevents a frontend traffic switch when the matching backend deployment failed or is still progressing.
 
-Secret examples live in `k8s/secrets`. Copy these examples and create real Kubernetes Secrets in the cluster, but do not commit real secret values to Git.
+Real secret values live in AWS Secrets Manager. External Secrets Operator reads those values and creates Kubernetes Secrets in the correct namespaces. This keeps passwords and GitHub tokens out of Git and out of ArgoCD manifests.
 
-For AWS/EKS, real secret values live in AWS Secrets Manager. External Secrets Operator reads those values and creates Kubernetes Secrets in the correct namespaces. This keeps passwords and GitHub tokens out of Git and out of ArgoCD manifests.
+The `k8s/secrets` directory documents the expected secret flow and contains placeholder examples only. Those examples are not used by the AWS/EKS deployment.
 
 ## ArgoCD GitOps
 
