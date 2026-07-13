@@ -95,13 +95,13 @@ variable "node_min_size" {
 variable "node_desired_size" {
   description = "Desired number of worker nodes."
   type        = number
-  default     = 5
+  default     = 6
 }
 
 variable "node_max_size" {
   description = "Maximum number of worker nodes."
   type        = number
-  default     = 6
+  default     = 7
 }
 
 variable "argocd_chart_version" {
