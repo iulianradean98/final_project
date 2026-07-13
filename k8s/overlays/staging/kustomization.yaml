@@ -27,6 +27,6 @@ patches:
         value: '["http://localhost:3001","http://recipe-rescue-staging.local"]'
 images:
   - name: iulian98/recipe-rescue-backend
-    newTag: sha-bd63340c9ab3
+    newTag: sha-683aea4e3a75
   - name: iulian98/recipe-rescue-frontend
-    newTag: sha-bd63340c9ab3
+    newTag: sha-683aea4e3a75
