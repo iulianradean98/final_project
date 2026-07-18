@@ -37,3 +37,13 @@ output "configure_kubectl_command" {
   description = "Command used to configure local kubectl access after terraform apply succeeds."
   value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}"
 }
+
+output "grafana_port_forward_command" {
+  description = "Command used to open Grafana locally through kubectl port-forward."
+  value       = "kubectl port-forward svc/monitoring-grafana -n monitoring 3000:80"
+}
+
+output "prometheus_port_forward_command" {
+  description = "Command used to open Prometheus locally through kubectl port-forward."
+  value       = "kubectl port-forward svc/monitoring-prometheus -n monitoring 9090:9090"
+}

@@ -28,6 +28,11 @@ node_max_size       = 7
 argocd_chart_version            = "10.1.3"
 argo_rollouts_chart_version     = "2.41.0"
 external_secrets_chart_version  = "2.7.0"
+kube_prometheus_stack_chart_version = "87.17.0"
+prometheus_blackbox_exporter_chart_version = "11.15.1"
+
+# Grafana is exposed only by kubectl port-forward in the demo.
+grafana_admin_password = "recipe-rescue-admin"
 
 # Existing S3 bucket used by Kubernetes PostgreSQL backup CronJobs.
 # Create it once outside this destroyable EKS stack.

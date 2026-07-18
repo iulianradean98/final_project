@@ -14,9 +14,11 @@ It creates:
 - encrypted default `gp3` Kubernetes StorageClass
 - EKS Pod Identity permissions for PostgreSQL backup/restore jobs to use the external S3 backup bucket
 - ArgoCD installed with Helm
+- Argo Rollouts installed with Helm
 - External Secrets Operator installed with Helm
 - EKS Pod Identity for External Secrets Operator
 - an ArgoCD repository credential synced from AWS Secrets Manager
+- Prometheus, Grafana, kube-state-metrics, node-exporter, and blackbox endpoint probes for minimal monitoring
 
 ## Why Terraform
 
@@ -31,6 +33,7 @@ Terraform lets us describe infrastructure in files instead of creating it manual
 - `locals.tf`: computes shared names, selected availability zones, and common tags.
 - `main.tf`: creates the VPC and EKS cluster using official community Terraform modules.
 - `helm.tf`: installs ArgoCD, External Secrets Operator, and the small Recipe Rescue platform bootstrap chart.
+- `monitoring.tf`: installs kube-prometheus-stack, blackbox exporter, Recipe Rescue endpoint probes, alert rules, and the Grafana dashboard.
 - `external-secrets.tf`: creates the IAM role and EKS Pod Identity association that allow External Secrets Operator to read `recipe-rescue/*` secrets from AWS Secrets Manager.
 - `ebs-csi.tf`: installs the AWS EBS CSI Driver and default encrypted `gp3` StorageClass used by PostgreSQL PVCs.
 - `db-backups.tf`: creates the IAM role and EKS Pod Identity associations that allow database backup/restore jobs to access the external PostgreSQL backup S3 bucket.
@@ -74,6 +77,43 @@ On Windows, you can also use the guided cleanup script:
 ```powershell
 .\scripts\destroy-infra.ps1
 ```
+
+## Monitoring
+
+Terraform installs a minimal monitoring stack in the `monitoring` namespace:
+
+- `kube-prometheus-stack`: Prometheus, Grafana, Prometheus Operator, kube-state-metrics, and node-exporter.
+- `prometheus-blackbox-exporter`: probes live HTTP endpoints from inside the cluster.
+- `Recipe Rescue Overview`: a Grafana dashboard loaded from a Terraform-managed ConfigMap.
+
+The monitoring services are intentionally internal `ClusterIP` services. This avoids extra public AWS LoadBalancers and keeps the demo safer. Open them locally with port-forwarding:
+
+```powershell
+kubectl port-forward svc/monitoring-grafana -n monitoring 3000:80
+kubectl port-forward svc/monitoring-prometheus -n monitoring 9090:9090
+```
+
+Open Grafana:
+
+```text
+http://localhost:3000
+```
+
+Demo login:
+
+```text
+user: admin
+password: recipe-rescue-admin
+```
+
+The blackbox exporter checks these internal application URLs every 30 seconds:
+
+- staging frontend: `http://recipe-rescue-web.recipe-rescue-staging.svc.cluster.local/`
+- staging backend readiness through frontend Nginx: `http://recipe-rescue-web.recipe-rescue-staging.svc.cluster.local/api/ready`
+- production frontend through the Nginx router: `http://recipe-rescue-router.recipe-rescue-production.svc.cluster.local/`
+- production backend readiness through the Nginx router: `http://recipe-rescue-router.recipe-rescue-production.svc.cluster.local/api/ready`
+
+The `RecipeRescueEndpointDown` alert becomes active if one of those probes fails for more than 2 minutes. This is intentionally small but presentation-friendly: it proves that the platform observes both application environments, while Kubernetes probes and Argo Rollouts still handle runtime self-healing and rollback.
 
 ## First-Time Setup
 

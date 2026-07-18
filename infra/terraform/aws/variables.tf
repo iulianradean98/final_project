@@ -122,6 +122,25 @@ variable "external_secrets_chart_version" {
   default     = "2.7.0"
 }
 
+variable "kube_prometheus_stack_chart_version" {
+  description = "Version of the kube-prometheus-stack Helm chart to install for cluster and application monitoring."
+  type        = string
+  default     = "87.17.0"
+}
+
+variable "prometheus_blackbox_exporter_chart_version" {
+  description = "Version of the prometheus-blackbox-exporter Helm chart to install for HTTP endpoint probes."
+  type        = string
+  default     = "11.15.1"
+}
+
+variable "grafana_admin_password" {
+  description = "Demo Grafana admin password. Grafana is exposed only through kubectl port-forward, not through a public LoadBalancer."
+  type        = string
+  sensitive   = true
+  default     = "recipe-rescue-admin"
+}
+
 variable "argocd_github_repo_secret_name" {
   description = "AWS Secrets Manager secret containing ArgoCD Git repository credentials."
   type        = string
