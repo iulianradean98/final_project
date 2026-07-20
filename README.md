@@ -214,6 +214,7 @@ The AWS/EKS platform includes a minimal monitoring stack installed by Terraform:
 - `kube-prometheus-stack`: Prometheus, Grafana, Prometheus Operator, kube-state-metrics, and node-exporter.
 - `prometheus-blackbox-exporter`: HTTP probes for live application endpoints.
 - `Recipe Rescue Overview` Grafana dashboard: endpoint health, running pods, restarts, database readiness, and ArgoCD/Rollouts controller visibility.
+- Optional Alertmanager email notifications through AWS SES SMTP.
 
 Grafana and Prometheus are internal `ClusterIP` services. They are not exposed publicly through AWS LoadBalancers. For demo access, use port-forwarding:
 
@@ -233,7 +234,7 @@ Default demo login:
 - User: `admin`
 - Password: `recipe-rescue-admin`
 
-Prometheus probes the staging and production frontend/backend readiness endpoints every 30 seconds. If an endpoint stays down for more than 2 minutes, the `RecipeRescueEndpointDown` alert becomes active. This monitoring layer complements the existing self-healing mechanisms: Kubernetes probes restart unhealthy containers, Argo Rollouts blocks or aborts unsafe releases, ArgoCD restores Git drift, and Terraform recovery can recreate infrastructure.
+Prometheus probes the staging and production frontend/backend readiness endpoints every 30 seconds. If an endpoint stays down for more than 2 minutes, the `RecipeRescueEndpointDown` alert becomes active. When `ENABLE_EMAIL_ALERTS=true` and SES SMTP credentials are configured in GitHub secrets, Alertmanager also sends the notification by email. This monitoring layer complements the existing self-healing mechanisms: Kubernetes probes restart unhealthy containers, Argo Rollouts blocks or aborts unsafe releases, ArgoCD restores Git drift, and Terraform recovery can recreate infrastructure.
 
 ## Application Pages
 

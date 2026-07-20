@@ -50,7 +50,38 @@ Two lightweight alert rules are installed:
 - `RecipeRescueEndpointDown`: active when a staging or production frontend/backend probe fails for more than 2 minutes.
 - `RecipeRescuePodRestarting`: active when a Recipe Rescue pod restarts in the last 10 minutes.
 
-Alertmanager is disabled to keep the implementation minimal and avoid adding email/Slack configuration. For the presentation, the alert state can still be inspected in Prometheus/Grafana.
+Alertmanager can send email through AWS SES SMTP when `enable_email_alerts=true`. If email alerting is disabled, alerts are still visible in Prometheus/Grafana but no email is sent.
+
+## Optional Email Alerts Through AWS SES
+
+SES manual setup:
+
+1. In Amazon SES, region `eu-central-1`, verify the sender email address.
+2. If SES is in sandbox mode, verify the receiver email address too.
+3. In SES SMTP settings, create IAM SMTP credentials.
+4. Keep the SMTP username/password secret.
+
+GitHub repository variables:
+
+```text
+ENABLE_EMAIL_ALERTS=true
+ALERT_EMAIL_FROM=iulian.radean@gmail.com
+ALERT_EMAIL_TO=iulian.radean@gmail.com
+ALERT_SMTP_SMARTHOST=email-smtp.eu-central-1.amazonaws.com:587
+```
+
+GitHub repository secrets:
+
+```text
+ALERT_SMTP_USERNAME=<SES SMTP username>
+ALERT_SMTP_PASSWORD=<SES SMTP password>
+```
+
+After these values are configured, run the `Infrastructure Recovery` workflow in apply mode. Terraform enables Alertmanager and configures the email receiver.
+
+Important security note:
+
+> The SMTP username/password are never committed to Git. They are passed to Terraform through GitHub Actions secrets. Terraform state is stored in the encrypted S3 backend, so treat access to the Terraform state bucket as sensitive infrastructure access.
 
 ## Access Grafana
 
@@ -117,6 +148,41 @@ Check alerts:
 Status -> Rules
 Alerts
 ```
+
+To check that Alertmanager exists when email is enabled:
+
+```powershell
+kubectl get pods -n monitoring | Select-String alertmanager
+kubectl port-forward svc/alertmanager-operated -n monitoring 9093:9093
+```
+
+Open:
+
+```text
+http://localhost:9093
+```
+
+## Quick Email Alert Test
+
+The easiest safe demo test is to temporarily scale down the staging frontend so the blackbox probe fails:
+
+```powershell
+kubectl scale deployment recipe-rescue-web -n recipe-rescue-staging --replicas=0
+```
+
+Wait around 2-3 minutes. Then check:
+
+- Prometheus `Alerts` page.
+- Alertmanager UI.
+- Email inbox.
+
+Restore staging:
+
+```powershell
+kubectl scale deployment recipe-rescue-web -n recipe-rescue-staging --replicas=1
+```
+
+ArgoCD may also restore it automatically because staging is GitOps-managed. Once the endpoint is healthy again, Alertmanager should send a resolved notification if `send_resolved=true` is enabled.
 
 ## Kubernetes Commands
 

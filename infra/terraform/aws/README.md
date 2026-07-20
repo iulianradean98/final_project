@@ -115,6 +115,24 @@ The blackbox exporter checks these internal application URLs every 30 seconds:
 
 The `RecipeRescueEndpointDown` alert becomes active if one of those probes fails for more than 2 minutes. This is intentionally small but presentation-friendly: it proves that the platform observes both application environments, while Kubernetes probes and Argo Rollouts still handle runtime self-healing and rollback.
 
+Email notifications can be enabled through Alertmanager and AWS SES SMTP. Configure these GitHub repository variables:
+
+```text
+ENABLE_EMAIL_ALERTS=true
+ALERT_EMAIL_FROM=iulian.radean@gmail.com
+ALERT_EMAIL_TO=iulian.radean@gmail.com
+ALERT_SMTP_SMARTHOST=email-smtp.eu-central-1.amazonaws.com:587
+```
+
+Configure these GitHub repository secrets:
+
+```text
+ALERT_SMTP_USERNAME=<SES SMTP username>
+ALERT_SMTP_PASSWORD=<SES SMTP password>
+```
+
+The SMTP username and password must not be committed to Git. The infrastructure recovery workflow passes them to Terraform through `TF_VAR_alert_smtp_username` and `TF_VAR_alert_smtp_password`. Terraform state is stored in the encrypted S3 backend, so access to that state bucket should be treated as sensitive infrastructure access.
+
 ## First-Time Setup
 
 Install these tools locally:

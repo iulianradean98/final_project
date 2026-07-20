@@ -141,6 +141,44 @@ variable "grafana_admin_password" {
   default     = "recipe-rescue-admin"
 }
 
+variable "enable_email_alerts" {
+  description = "Enable Alertmanager email notifications through SMTP."
+  type        = bool
+  default     = false
+}
+
+variable "alert_email_from" {
+  description = "Verified SES sender email address used by Alertmanager."
+  type        = string
+  default     = ""
+}
+
+variable "alert_email_to" {
+  description = "Recipient email address for Alertmanager notifications. In SES sandbox this address must also be verified."
+  type        = string
+  default     = ""
+}
+
+variable "alert_smtp_smarthost" {
+  description = "SMTP host and port used by Alertmanager, for example email-smtp.eu-central-1.amazonaws.com:587."
+  type        = string
+  default     = "email-smtp.eu-central-1.amazonaws.com:587"
+}
+
+variable "alert_smtp_username" {
+  description = "SES SMTP username used by Alertmanager."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "alert_smtp_password" {
+  description = "SES SMTP password used by Alertmanager."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "argocd_github_repo_secret_name" {
   description = "AWS Secrets Manager secret containing ArgoCD Git repository credentials."
   type        = string

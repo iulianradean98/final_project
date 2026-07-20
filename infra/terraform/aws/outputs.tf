@@ -47,3 +47,8 @@ output "prometheus_port_forward_command" {
   description = "Command used to open Prometheus locally through kubectl port-forward."
   value       = "kubectl port-forward svc/monitoring-prometheus -n monitoring 9090:9090"
 }
+
+output "alertmanager_port_forward_command" {
+  description = "Command used to open Alertmanager locally through kubectl port-forward when email alerts are enabled."
+  value       = "kubectl port-forward svc/alertmanager-operated -n monitoring 9093:9093"
+}

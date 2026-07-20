@@ -315,6 +315,74 @@ locals {
       }
     ]
   }
+
+  recipe_rescue_alertmanager_email_values = yamlencode({
+    alertmanager = {
+      enabled = true
+
+      service = {
+        type = "ClusterIP"
+      }
+
+      alertmanagerSpec = {
+        replicas = 1
+        resources = {
+          requests = {
+            cpu    = "25m"
+            memory = "64Mi"
+          }
+          limits = {
+            cpu    = "100m"
+            memory = "128Mi"
+          }
+        }
+      }
+
+      config = {
+        global = {
+          smtp_smarthost     = var.alert_smtp_smarthost
+          smtp_from          = var.alert_email_from
+          smtp_require_tls   = true
+          smtp_auth_username = ""
+          smtp_auth_password = ""
+        }
+
+        route = {
+          receiver        = "recipe-rescue-email"
+          group_by        = ["alertname", "environment", "component"]
+          group_wait      = "30s"
+          group_interval  = "5m"
+          repeat_interval = "1h"
+        }
+
+        receivers = [
+          {
+            name = "recipe-rescue-email"
+            email_configs = [
+              {
+                to            = var.alert_email_to
+                from          = var.alert_email_from
+                send_resolved = true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  })
+}
+
+check "email_alerts_require_smtp_config" {
+  assert {
+    condition = !var.enable_email_alerts || (
+      length(trimspace(var.alert_email_from)) > 0 &&
+      length(trimspace(var.alert_email_to)) > 0 &&
+      length(trimspace(var.alert_smtp_smarthost)) > 0 &&
+      length(trimspace(var.alert_smtp_username)) > 0 &&
+      length(trimspace(var.alert_smtp_password)) > 0
+    )
+    error_message = "When enable_email_alerts=true, set alert_email_from, alert_email_to, alert_smtp_smarthost, alert_smtp_username, and alert_smtp_password."
+  }
 }
 
 resource "kubernetes_config_map_v1" "recipe_rescue_grafana_dashboard" {
@@ -391,7 +459,7 @@ resource "helm_release" "kube_prometheus_stack" {
   wait    = true
   timeout = 900
 
-  values = [
+  values = concat([
     yamlencode({
       fullnameOverride = "monitoring"
 
@@ -561,10 +629,22 @@ resource "helm_release" "kube_prometheus_stack" {
         }
       }
     }),
-  ]
+  ], var.enable_email_alerts ? [local.recipe_rescue_alertmanager_email_values] : [])
 
   depends_on = [
     helm_release.blackbox_exporter,
     kubernetes_config_map_v1.recipe_rescue_grafana_dashboard,
   ]
+
+  dynamic "set_sensitive" {
+    for_each = var.enable_email_alerts ? {
+      "alertmanager.config.global.smtp_auth_username" = var.alert_smtp_username
+      "alertmanager.config.global.smtp_auth_password" = var.alert_smtp_password
+    } : {}
+
+    content {
+      name  = set_sensitive.key
+      value = set_sensitive.value
+    }
+  }
 }
