@@ -207,6 +207,35 @@ ArgoCD deploys database backup CronJobs:
 
 The infrastructure recovery workflow can optionally restore `latest.sql.gz` after rebuilding the platform. This gives the capstone a complete recovery story: Terraform recreates AWS/EKS, ArgoCD redeploys the app, and the recovery workflow can restore PostgreSQL data from S3.
 
+## Monitoring
+
+The AWS/EKS platform includes a minimal monitoring stack installed by Terraform:
+
+- `kube-prometheus-stack`: Prometheus, Grafana, Prometheus Operator, kube-state-metrics, and node-exporter.
+- `prometheus-blackbox-exporter`: HTTP probes for live application endpoints.
+- `Recipe Rescue Overview` Grafana dashboard: endpoint health, running pods, restarts, database readiness, and ArgoCD/Rollouts controller visibility.
+- Optional Alertmanager email notifications through AWS SES SMTP.
+
+Grafana and Prometheus are internal `ClusterIP` services. They are not exposed publicly through AWS LoadBalancers. For demo access, use port-forwarding:
+
+```powershell
+kubectl port-forward svc/monitoring-grafana -n monitoring 3000:80
+kubectl port-forward svc/monitoring-prometheus -n monitoring 9090:9090
+```
+
+Open Grafana at:
+
+```text
+http://localhost:3000
+```
+
+Default demo login:
+
+- User: `admin`
+- Password: `recipe-rescue-admin`
+
+Prometheus probes the staging and production frontend/backend readiness endpoints every 30 seconds. If an endpoint stays down for more than 2 minutes, the `RecipeRescueEndpointDown` alert becomes active. When `ENABLE_EMAIL_ALERTS=true` and SES SMTP credentials are configured in GitHub secrets, Alertmanager also sends the notification by email. This monitoring layer complements the existing self-healing mechanisms: Kubernetes probes restart unhealthy containers, Argo Rollouts blocks or aborts unsafe releases, ArgoCD restores Git drift, and Terraform recovery can recreate infrastructure.
+
 ## Application Pages
 
 - Home: landing page with project summary and navigation.
@@ -263,12 +292,15 @@ The demo user owns the seeded pantry inventory. Built-in recipes are public, whi
 - PostgreSQL gives the project real persistence.
 - The UI has visible behavior changes, which is useful when demonstrating staging and Blue/Green production deployments.
 
-## Planned DevOps Expansion
+## Completed DevOps Scope
 
-- GitHub repository with branch strategy.
-- Jenkins CI pipeline for linting and tests.
-- Docker image publishing to Docker Hub.
-- Kubernetes manifests for frontend, backend, and PostgreSQL.
-- ArgoCD for GitOps-based continuous deployment.
-- AWS infrastructure using Terraform, with Ansible only if configuration automation becomes useful.
-- Optional Prometheus and Grafana monitoring after the deployment flow is stable.
+- GitHub repository with branch strategy and protected PR-based promotion.
+- GitHub Actions CI for linting, tests, Docker builds, Kubernetes validation, and ArgoCD policy checks.
+- Docker image publishing to DockerHub with `latest`, `sha-...`, and `build-...` tags.
+- Kubernetes manifests for frontend, backend, PostgreSQL, backups, and production Rollouts.
+- ArgoCD GitOps-based continuous deployment for staging and production.
+- Argo Rollouts blue-green production deployment with smoke tests, pre-promotion database backup, post-promotion checks, and rollback protection.
+- AWS infrastructure using Terraform.
+- AWS Secrets Manager and External Secrets Operator for cloud secret delivery.
+- S3 PostgreSQL backups and infrastructure recovery workflows.
+- Prometheus and Grafana monitoring with blackbox endpoint probes.

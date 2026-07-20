@@ -122,6 +122,63 @@ variable "external_secrets_chart_version" {
   default     = "2.7.0"
 }
 
+variable "kube_prometheus_stack_chart_version" {
+  description = "Version of the kube-prometheus-stack Helm chart to install for cluster and application monitoring."
+  type        = string
+  default     = "87.17.0"
+}
+
+variable "prometheus_blackbox_exporter_chart_version" {
+  description = "Version of the prometheus-blackbox-exporter Helm chart to install for HTTP endpoint probes."
+  type        = string
+  default     = "11.15.1"
+}
+
+variable "grafana_admin_password" {
+  description = "Demo Grafana admin password. Grafana is exposed only through kubectl port-forward, not through a public LoadBalancer."
+  type        = string
+  sensitive   = true
+  default     = "recipe-rescue-admin"
+}
+
+variable "enable_email_alerts" {
+  description = "Enable Alertmanager email notifications through SMTP."
+  type        = bool
+  default     = false
+}
+
+variable "alert_email_from" {
+  description = "Verified SES sender email address used by Alertmanager."
+  type        = string
+  default     = ""
+}
+
+variable "alert_email_to" {
+  description = "Recipient email address for Alertmanager notifications. In SES sandbox this address must also be verified."
+  type        = string
+  default     = ""
+}
+
+variable "alert_smtp_smarthost" {
+  description = "SMTP host and port used by Alertmanager, for example email-smtp.eu-central-1.amazonaws.com:587."
+  type        = string
+  default     = "email-smtp.eu-central-1.amazonaws.com:587"
+}
+
+variable "alert_smtp_username" {
+  description = "SES SMTP username used by Alertmanager."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "alert_smtp_password" {
+  description = "SES SMTP password used by Alertmanager."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "argocd_github_repo_secret_name" {
   description = "AWS Secrets Manager secret containing ArgoCD Git repository credentials."
   type        = string
