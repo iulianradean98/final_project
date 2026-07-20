@@ -357,6 +357,9 @@ locals {
 
         receivers = [
           {
+            name = "null"
+          },
+          {
             name = "recipe-rescue-email"
             email_configs = [
               {

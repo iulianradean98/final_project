@@ -153,7 +153,7 @@ To check that Alertmanager exists when email is enabled:
 
 ```powershell
 kubectl get pods -n monitoring | Select-String alertmanager
-kubectl port-forward svc/alertmanager-operated -n monitoring 9093:9093
+kubectl port-forward svc/monitoring-alertmanager -n monitoring 9093:9093
 ```
 
 Open:
