@@ -78,6 +78,6 @@ patches:
       $patch: delete
 images:
   - name: iulian98/recipe-rescue-backend
-    newTag: sha-1b7cf0d3a11f
+    newTag: sha-6babe7f9cadc
   - name: iulian98/recipe-rescue-frontend
-    newTag: sha-1b7cf0d3a11f
+    newTag: sha-6babe7f9cadc
