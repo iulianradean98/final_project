@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   promote-release:
-    name: Promote release to main SHA
+    name: Complete approved release PR
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'workflow_dispatch' ||
@@ -37,7 +37,10 @@ jobs:
         github.event_name == 'pull_request_review' &&
         github.event.review.state == 'approved' &&
         github.event.pull_request.base.ref == 'release' &&
-        github.event.pull_request.head.ref == 'main'
+        (
+          github.event.pull_request.head.ref == 'main' ||
+          startsWith(github.event.pull_request.head.ref, 'release-promotion-')
+        )
       ) ||
       (
         github.event_name == 'workflow_run' &&
@@ -67,14 +70,13 @@ jobs:
           else
             pr_number="$(gh pr list \
               --base release \
-              --head main \
               --state open \
-              --json number \
-              --jq 'map(.number) | first // ""')"
+              --json number,headRefName \
+              --jq 'map(select(.headRefName == "main" or (.headRefName | startswith("release-promotion-")))) | first.number // ""')"
           fi
 
           if [ -z "${pr_number}" ]; then
-            echo "No open main -> release PR is ready for automatic promotion."
+            echo "No open release promotion PR is ready for automatic completion."
             echo "should_promote=false" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
@@ -114,8 +116,13 @@ jobs:
             exit 1
           fi
 
-          if [ "${base_ref}" != "release" ] || [ "${head_ref}" != "main" ]; then
-            echo "Release PR must be main -> release. Found ${head_ref} -> ${base_ref}."
+          if [ "${base_ref}" != "release" ]; then
+            echo "Release PR must target release. Found ${head_ref} -> ${base_ref}."
+            exit 1
+          fi
+
+          if [ "${head_ref}" != "main" ] && [[ "${head_ref}" != release-promotion-* ]]; then
+            echo "Release PR must come from main or release-promotion-*. Found ${head_ref}."
             exit 1
           fi
 
@@ -133,7 +140,7 @@ jobs:
           main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
           release_sha="$(git ls-remote origin refs/heads/release | awk '{print $1}')"
 
-          if [ "${head_sha}" != "${main_sha}" ]; then
+          if [ "${head_ref}" = "main" ] && [ "${head_sha}" != "${main_sha}" ]; then
             echo "The PR head no longer matches current main."
             echo "PR head: ${head_sha}"
             echo "Main:    ${main_sha}"
@@ -143,7 +150,7 @@ jobs:
 
           echo "number=${PR_NUMBER}" >> "${GITHUB_OUTPUT}"
           echo "url=${pr_url}" >> "${GITHUB_OUTPUT}"
-          echo "main_sha=${main_sha}" >> "${GITHUB_OUTPUT}"
+          echo "promotion_sha=${head_sha}" >> "${GITHUB_OUTPUT}"
           echo "release_sha=${release_sha}" >> "${GITHUB_OUTPUT}"
           echo "should_promote=true" >> "${GITHUB_OUTPUT}"
 
@@ -154,7 +161,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
-          HEAD_SHA: ${{ steps.pr.outputs.main_sha }}
+          HEAD_SHA: ${{ steps.pr.outputs.promotion_sha }}
         run: |
           set -euo pipefail
 
@@ -212,43 +219,35 @@ jobs:
 
           echo "checks_ready=true" >> "${GITHUB_OUTPUT}"
 
-      - name: Move release to main SHA
-        if: steps.release-checks.outputs.checks_ready == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
-          MAIN_SHA: ${{ steps.pr.outputs.main_sha }}
-        run: |
-          set -euo pipefail
-
-          gh api \
-            --method PATCH \
-            "repos/${GITHUB_REPOSITORY}/git/refs/heads/release" \
-            -f sha="${MAIN_SHA}" \
-            -F force=true
-
-      - name: Comment and close release PR
+      - name: Merge release promotion PR
         if: steps.release-checks.outputs.checks_ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
-          MAIN_SHA: ${{ steps.pr.outputs.main_sha }}
+        run: |
+          set -euo pipefail
+
+          gh pr merge "${PR_NUMBER}" --merge
+
+      - name: Comment on release PR
+        if: steps.release-checks.outputs.checks_ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PROMOTION_SHA: ${{ steps.pr.outputs.promotion_sha }}
           RELEASE_SHA: ${{ steps.pr.outputs.release_sha }}
         run: |
           set -euo pipefail
-          image_tag="sha-${MAIN_SHA:0:12}"
+          image_tag="sha-${PROMOTION_SHA:0:12}"
 
           gh pr comment "${PR_NUMBER}" --body "Release promotion completed by automation.
 
           - Previous release SHA: \`${RELEASE_SHA}\`
-          - Approved application SHA: \`${MAIN_SHA}\`
+          - Approved promotion SHA: \`${PROMOTION_SHA}\`
           - Production image tag: \`${image_tag}\`
           - Result: ArgoCD will reconcile production from \`release\`; Argo Rollouts will run blue-green smoke tests, switch traffic, and roll back automatically if post-promotion health checks fail.
 
-          This PR is being closed because the release branch was promoted after approval and passing checks."
-
-          if ! gh pr close "${PR_NUMBER}"; then
-            echo "::notice::Release was promoted, but GitHub did not allow the workflow to close PR #${PR_NUMBER}. This can happen when GitHub already considers the PR completed because release now points to main."
-          fi
+          This PR was merged after approval and passing checks."
 
       - name: Write promotion summary
         if: steps.release-checks.outputs.checks_ready == 'true'
@@ -258,7 +257,7 @@ jobs:
             echo ""
             echo "- PR: ${{ steps.pr.outputs.url }}"
             echo "- Previous release SHA: \`${{ steps.pr.outputs.release_sha }}\`"
-            echo "- Approved application SHA: \`${{ steps.pr.outputs.main_sha }}\`"
-            echo "- Production image tag: \`sha-$(echo '${{ steps.pr.outputs.main_sha }}' | cut -c1-12)\`"
+            echo "- Approved promotion SHA: \`${{ steps.pr.outputs.promotion_sha }}\`"
+            echo "- Production image tag: \`sha-$(echo '${{ steps.pr.outputs.promotion_sha }}' | cut -c1-12)\`"
             echo "- Result: ArgoCD will reconcile production from \`release\`; Argo Rollouts owns blue-green promotion and rollback."
           } >> "${GITHUB_STEP_SUMMARY}"
