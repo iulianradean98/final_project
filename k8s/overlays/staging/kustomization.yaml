@@ -40,6 +40,6 @@ patches:
         value: staging
 images:
   - name: iulian98/recipe-rescue-backend
-    newTag: sha-6babe7f9cadc
+    newTag: sha-5b607ec971aa
   - name: iulian98/recipe-rescue-frontend
-    newTag: sha-6babe7f9cadc
+    newTag: sha-5b607ec971aa
