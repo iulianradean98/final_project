@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -49,13 +49,41 @@ jobs:
 
           echo "promotion_needed=true" >> "${GITHUB_ENV}"
 
+      - name: Prepare release promotion branch
+        if: env.promotion_needed == 'true'
+        run: |
+          set -euo pipefail
+
+          image_tag="sha-${main_sha:0:12}"
+          promotion_branch="release-promotion-${main_sha:0:12}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git switch --force-create "${promotion_branch}" origin/release
+          git merge --no-edit origin/main
+
+          python scripts/set_kustomize_images.py k8s/overlays/production/kustomization.yaml "${image_tag}"
+
+          git add k8s/overlays/production/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "Production image tags already pinned to ${image_tag}."
+          else
+            git commit -m "Pin production images ${image_tag}"
+          fi
+
+          git push origin "HEAD:${promotion_branch}" --force-with-lease
+
+          echo "promotion_branch=${promotion_branch}" >> "${GITHUB_ENV}"
+          echo "image_tag=${image_tag}" >> "${GITHUB_ENV}"
+
       - name: Open release pull request
         if: env.promotion_needed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           existing_pr="$(gh pr list \
-            --head main \
+            --head "${promotion_branch}" \
             --base release \
             --state open \
             --json number \
@@ -68,15 +96,15 @@ jobs:
 
           gh pr create \
             --base release \
-            --head main \
+            --head "${promotion_branch}" \
             --title "Promote main to release" \
             --body "Promotes the validated main branch into the protected release branch.
 
-          This PR is an approval and validation gate. Do not use the GitHub merge button for this PR.
+          This PR is the approval and validation gate for production.
 
-          After the release checks pass and the PR is approved, the \`Complete Release Promotion\` workflow moves \`release\` to the approved \`main\` commit, pins the production image tag on \`release\`, comments on this PR, and closes it when GitHub allows that cleanup. The workflow can also be run manually with this PR number if a retry is needed.
+          The PR branch was created from \`release\`, merged with \`main\`, and pinned to production image tag \`${image_tag}\`.
 
-          After the release branch is promoted, ArgoCD will reconcile production from \`release\` and Argo Rollouts will run the automated blue-green deployment."
+          After this PR is merged, ArgoCD will reconcile production from \`release\` and Argo Rollouts will run the automated blue-green deployment."
 
       - name: Write promotion summary
         run: |
@@ -87,5 +115,7 @@ jobs:
             echo "- Target branch: \`release\`"
             echo "- Source SHA: \`${main_sha:-not checked}\`"
             echo "- Current release SHA: \`${release_sha:-not checked}\`"
-            echo "- Approval gate: release PR plus Complete Release Promotion workflow"
+            echo "- Promotion branch: \`${promotion_branch:-not created}\`"
+            echo "- Production image tag: \`${image_tag:-not created}\`"
+            echo "- Approval gate: release PR with release checks"
           } >> "${GITHUB_STEP_SUMMARY}"
