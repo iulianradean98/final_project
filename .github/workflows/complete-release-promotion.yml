@@ -226,81 +226,6 @@ jobs:
             -f sha="${MAIN_SHA}" \
             -F force=true
 
-      - name: Pin production deployment images
-        id: production-deployment
-        if: steps.release-checks.outputs.checks_ready == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PROMOTION_TOKEN || github.token }}
-          MAIN_SHA: ${{ steps.pr.outputs.main_sha }}
-        run: |
-          set -euo pipefail
-
-          image_tag="sha-${MAIN_SHA:0:12}"
-          git fetch origin release
-          git switch --force-create release origin/release
-
-          python scripts/set_kustomize_images.py k8s/overlays/production/kustomization.yaml "${image_tag}"
-
-          if git diff --quiet -- k8s/overlays/production/kustomization.yaml; then
-            echo "Production is already pinned to ${image_tag}."
-            echo "image_tag=${image_tag}" >> "${GITHUB_OUTPUT}"
-            echo "deployment_commit_created=false" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          base_tree="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${MAIN_SHA}" --jq '.tree.sha')"
-
-          blob_sha="$(jq -n \
-            --rawfile content k8s/overlays/production/kustomization.yaml \
-            '{content: $content, encoding: "utf-8"}' |
-            gh api "repos/${GITHUB_REPOSITORY}/git/blobs" \
-              --method POST \
-              --input - \
-              --jq '.sha')"
-
-          tree_sha="$(jq -n \
-            --arg base_tree "${base_tree}" \
-            --arg blob_sha "${blob_sha}" \
-            '{
-              base_tree: $base_tree,
-              tree: [
-                {
-                  path: "k8s/overlays/production/kustomization.yaml",
-                  mode: "100644",
-                  type: "blob",
-                  sha: $blob_sha
-                }
-              ]
-            }' |
-            gh api "repos/${GITHUB_REPOSITORY}/git/trees" \
-              --method POST \
-              --input - \
-              --jq '.sha')"
-
-          deployment_commit_sha="$(jq -n \
-            --arg message "Deploy production ${image_tag}" \
-            --arg tree_sha "${tree_sha}" \
-            --arg parent_sha "${MAIN_SHA}" \
-            '{
-              message: $message,
-              tree: $tree_sha,
-              parents: [$parent_sha]
-            }' |
-            gh api "repos/${GITHUB_REPOSITORY}/git/commits" \
-              --method POST \
-              --input - \
-              --jq '.sha')"
-
-          gh api \
-            --method PATCH \
-            "repos/${GITHUB_REPOSITORY}/git/refs/heads/release" \
-            -f sha="${deployment_commit_sha}" \
-            -F force=true
-
-          echo "image_tag=${image_tag}" >> "${GITHUB_OUTPUT}"
-          echo "deployment_commit_created=true" >> "${GITHUB_OUTPUT}"
-          echo "deployment_commit_sha=${deployment_commit_sha}" >> "${GITHUB_OUTPUT}"
-
       - name: Comment and close release PR
         if: steps.release-checks.outputs.checks_ready == 'true'
         env:
@@ -308,22 +233,18 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           MAIN_SHA: ${{ steps.pr.outputs.main_sha }}
           RELEASE_SHA: ${{ steps.pr.outputs.release_sha }}
-          IMAGE_TAG: ${{ steps.production-deployment.outputs.image_tag }}
-          DEPLOYMENT_COMMIT_CREATED: ${{ steps.production-deployment.outputs.deployment_commit_created }}
-          DEPLOYMENT_COMMIT_SHA: ${{ steps.production-deployment.outputs.deployment_commit_sha }}
         run: |
           set -euo pipefail
+          image_tag="sha-${MAIN_SHA:0:12}"
 
           gh pr comment "${PR_NUMBER}" --body "Release promotion completed by automation.
 
           - Previous release SHA: \`${RELEASE_SHA}\`
           - Approved application SHA: \`${MAIN_SHA}\`
-          - Production image tag: \`${IMAGE_TAG}\`
-          - Deployment commit created: \`${DEPLOYMENT_COMMIT_CREATED}\`
-          - Deployment commit SHA: \`${DEPLOYMENT_COMMIT_SHA:-not-created}\`
+          - Production image tag: \`${image_tag}\`
           - Result: ArgoCD will reconcile production from \`release\`; Argo Rollouts will run blue-green smoke tests, switch traffic, and roll back automatically if post-promotion health checks fail.
 
-          This PR is being closed because the release branch was promoted directly after approval and passing checks."
+          This PR is being closed because the release branch was promoted after approval and passing checks."
 
           if ! gh pr close "${PR_NUMBER}"; then
             echo "::notice::Release was promoted, but GitHub did not allow the workflow to close PR #${PR_NUMBER}. This can happen when GitHub already considers the PR completed because release now points to main."
@@ -338,8 +259,6 @@ jobs:
             echo "- PR: ${{ steps.pr.outputs.url }}"
             echo "- Previous release SHA: \`${{ steps.pr.outputs.release_sha }}\`"
             echo "- Approved application SHA: \`${{ steps.pr.outputs.main_sha }}\`"
-            echo "- Production image tag: \`${{ steps.production-deployment.outputs.image_tag }}\`"
-            echo "- Deployment commit created: \`${{ steps.production-deployment.outputs.deployment_commit_created }}\`"
-            echo "- Deployment commit SHA: \`${{ steps.production-deployment.outputs.deployment_commit_sha || 'not-created' }}\`"
+            echo "- Production image tag: \`sha-$(echo '${{ steps.pr.outputs.main_sha }}' | cut -c1-12)\`"
             echo "- Result: ArgoCD will reconcile production from \`release\`; Argo Rollouts owns blue-green promotion and rollback."
           } >> "${GITHUB_STEP_SUMMARY}"
