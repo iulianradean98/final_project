@@ -76,3 +76,8 @@ patches:
         name: recipe-rescue-db-backup
         namespace: recipe-rescue
       $patch: delete
+images:
+  - name: iulian98/recipe-rescue-backend
+    newTag: sha-1b7cf0d3a11f
+  - name: iulian98/recipe-rescue-frontend
+    newTag: sha-1b7cf0d3a11f
