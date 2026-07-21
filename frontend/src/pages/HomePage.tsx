@@ -116,7 +116,7 @@ function HomePage({ isAuthenticated, pantryCount, recipeCount }: HomePageProps) 
       <section className="feature-grid">
         <article>
           <Search size={22} />
-          <h2>Modern ingredient picker DEMO</h2>
+          <h2>Modern ingredient picker</h2>
           <p>Search, filter by category, select only what you want to use, and review your basket before matching.</p>
         </article>
         <article>
