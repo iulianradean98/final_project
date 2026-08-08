@@ -1,6 +1,10 @@
-# Recipe Rescue
+# Recipe Rescue — End-to-End DevOps Capstone
 
-Recipe Rescue is a professional 3-tier web application for a DevOps capstone project. It helps users track pantry ingredients and discover recipes they can cook with what they already have.
+A production-oriented three-tier application demonstrating a complete DevOps lifecycle across development, CI/CD, cloud infrastructure, Kubernetes orchestration, GitOps deployment, observability and disaster recovery.
+
+Key technologies: AWS · Terraform · EKS · Kubernetes · Docker · GitHub Actions · ArgoCD · Argo Rollouts · Prometheus · Grafana · PostgreSQL · AWS Secrets Manager
+
+Highlights: automated CI/CD, GitOps deployment, blue-green releases, infrastructure as code, secrets management, monitoring/alerting, automated database backups and disaster recovery.
 
 ## Current Stack
 
